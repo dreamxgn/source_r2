@@ -49,6 +49,7 @@ Several top-level directories are git submodules. Check `git status` and `.gitmo
 ### Git workflow
 
 - Do not create feature branches for repository changes. Commit directly to the `main` branch and push `main` to the configured remote when the user requests publication.
+- Use native `git` commands only for commits and publication. Do not require or use `gh`, and do not create pull requests unless the user explicitly overrides this rule.
 
 ### General
 

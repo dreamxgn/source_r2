@@ -11,6 +11,7 @@ from openpilot.common.params import Params
 from openpilot.common.realtime import Ratekeeper, Priority, config_realtime_process
 from openpilot.system.swaglog import cloudlog
 from openpilot.system.hardware import TICI
+from openpilot.selfdrive.controls.lib.vision_lead_estimator import VISION_ACCEL_TAU, VisionLeadEstimator
 
 from openpilot.common.kalman.simple_kalman import KF1D
 
@@ -149,16 +150,20 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
     return None
 
 
-def get_RadarState_from_vision(lead_msg: capnp._DynamicStructReader, v_ego: float, model_v_ego: float):
+def get_RadarState_from_vision(lead_msg: capnp._DynamicStructReader, v_ego: float, model_v_ego: float,
+                               vision_estimator: Optional[VisionLeadEstimator] = None):
   lead_v_rel_pred = lead_msg.v[0] - model_v_ego
+  d_rel = float(lead_msg.x[0] - RADAR_TO_CAMERA)
+  v_lead = float(v_ego + lead_v_rel_pred)
+  a_lead = vision_estimator.update(d_rel, lead_v_rel_pred, v_lead) if vision_estimator is not None else 0.0
   return {
-    "dRel": float(lead_msg.x[0] - RADAR_TO_CAMERA),
+    "dRel": d_rel,
     "yRel": float(-lead_msg.y[0]),
     "vRel": float(lead_v_rel_pred),
-    "vLead": float(v_ego + lead_v_rel_pred),
-    "vLeadK": float(v_ego + lead_v_rel_pred),
-    "aLeadK": 0.0,
-    "aLeadTau": 0.3,
+    "vLead": v_lead,
+    "vLeadK": v_lead,
+    "aLeadK": float(a_lead),
+    "aLeadTau": VISION_ACCEL_TAU,
     "fcw": False,
     "modelProb": float(lead_msg.prob),
     "status": True,
@@ -168,7 +173,8 @@ def get_RadarState_from_vision(lead_msg: capnp._DynamicStructReader, v_ego: floa
 
 
 def get_lead(v_ego: float, ready: bool, tracks: Dict[int, Track], lead_msg: capnp._DynamicStructReader,
-             model_v_ego: float, low_speed_override: bool = True) -> Dict[str, Any]:
+             model_v_ego: float, low_speed_override: bool = True,
+             vision_estimator: Optional[VisionLeadEstimator] = None) -> Dict[str, Any]:
   # Determine leads, this is where the essential logic happens
   if len(tracks) > 0 and ready and lead_msg.prob > .5:
     track = match_vision_to_track(v_ego, lead_msg, tracks)
@@ -177,9 +183,13 @@ def get_lead(v_ego: float, ready: bool, tracks: Dict[int, Track], lead_msg: capn
 
   lead_dict = {'status': False}
   if track is not None:
+    if vision_estimator is not None:
+      vision_estimator.reset()
     lead_dict = track.get_RadarState(lead_msg.prob)
   elif (track is None) and ready and (lead_msg.prob > .5):
-    lead_dict = get_RadarState_from_vision(lead_msg, v_ego, model_v_ego)
+    lead_dict = get_RadarState_from_vision(lead_msg, v_ego, model_v_ego, vision_estimator)
+  elif vision_estimator is not None:
+    vision_estimator.reset()
 
   if low_speed_override:
     low_speed_tracks = [c for c in tracks.values() if c.potential_low_speed_lead(v_ego)]
@@ -207,6 +217,7 @@ class RadarD:
     self.radar_state_valid = False
 
     self.ready = False
+    self.vision_lead_estimators = [VisionLeadEstimator(radar_ts), VisionLeadEstimator(radar_ts)]
 
   def update(self, sm: messaging.SubMaster, rr: Optional[car.RadarData]):
     self.current_time = 1e-9*max(sm.logMonoTime.values())
@@ -257,8 +268,10 @@ class RadarD:
       model_v_ego = self.v_ego
     leads_v3 = sm['modelV2'].leadsV3
     if len(leads_v3) > 1:
-      self.radar_state.leadOne = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[0], model_v_ego, low_speed_override=True)
-      self.radar_state.leadTwo = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[1], model_v_ego, low_speed_override=False)
+      self.radar_state.leadOne = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[0], model_v_ego, low_speed_override=True,
+                                          vision_estimator=self.vision_lead_estimators[0])
+      self.radar_state.leadTwo = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[1], model_v_ego, low_speed_override=False,
+                                          vision_estimator=self.vision_lead_estimators[1])
 
   def publish(self, pm: messaging.PubMaster, lag_ms: float):
     assert self.radar_state is not None

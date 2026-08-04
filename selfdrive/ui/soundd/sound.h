@@ -35,6 +35,16 @@ protected:
   SubMaster sm;
   Alert current_alert = {};
   QMap<AudibleAlert, QPair<QSoundEffect *, int>> sounds;
+  QSoundEffect *mounting_offset_voice;
+  QSoundEffect *calibration_success_voice;
+  QSoundEffect *calibration_failure_voice;
+  QSoundEffect *calibration_check_passed_voice;
+  QSoundEffect *calibration_recalibrating_voice;
+  QSoundEffect *calibration_initial_voice;
+  QSoundEffect *temperature_warning_sound;
+  bool mounting_offset_detected = false;
+  int temperature_warning_level = 0;
+  uint64_t last_temperature_warning_time = 0;
   int current_volume = -1;
   int dp_device_audible_alert_mode = 0;
 };

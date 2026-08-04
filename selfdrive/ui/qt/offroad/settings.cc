@@ -309,6 +309,9 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
     if (ConfirmationDialog::confirm(tr("Are you sure you want to reset calibration?"), tr("Reset"), this)) {
       params.remove("CalibrationParams");
       params.remove("LiveTorqueParameters");
+      // Notify the running calibrationd. Removing CalibrationParams alone only
+      // takes effect the next time the process starts.
+      params.putBool("ResetCalibration", true);
     }
   });
   addItem(resetCalibBtn);

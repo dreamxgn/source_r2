@@ -4,6 +4,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QStackedLayout>
+#include <QProgressBar>
 #include <QTimer>
 #include <QWidget>
 
@@ -29,6 +30,7 @@ private:
   void showEvent(QShowEvent *event) override;
   void hideEvent(QHideEvent *event) override;
   void refresh();
+  void updateCalibrationDisplay();
 
   Params params;
 
@@ -39,6 +41,10 @@ private:
   OffroadAlert* alerts_widget;
   QPushButton* alert_notif;
   QPushButton* update_notif;
+  QLabel* calibration_status;
+  QLabel* calibration_pitch;
+  QLabel* calibration_yaw;
+  QProgressBar* calibration_progress;
 };
 
 class HomeWindow : public QWidget {

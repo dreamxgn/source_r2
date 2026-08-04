@@ -35,11 +35,12 @@ MainWindow::MainWindow(QWidget *parent) : QWidget(parent) {
 
   QObject::connect(uiState(), &UIState::offroadTransition, [=](bool offroad) {
     if (!offroad) {
-      closeSettings();
+      // Show configuration instead of the camera-based onroad UI.
+      openSettings();
     }
   });
   QObject::connect(device(), &Device::interactiveTimeout, [=]() {
-    if (main_layout->currentWidget() == settingsWindow) {
+    if (!uiState()->scene.started && main_layout->currentWidget() == settingsWindow) {
       closeSettings();
     }
   });
@@ -72,14 +73,7 @@ void MainWindow::openSettings(int index, const QString &param) {
 
 void MainWindow::closeSettings() {
   main_layout->setCurrentWidget(homeWindow);
-
-  if (uiState()->scene.started) {
-    homeWindow->showSidebar(false);
-    // Map is always shown when using navigate on openpilot
-    if (uiState()->scene.navigate_on_openpilot) {
-      homeWindow->showMapPanel(true);
-    }
-  }
+  homeWindow->showSidebar(true);
 }
 
 bool MainWindow::eventFilter(QObject *obj, QEvent *event) {

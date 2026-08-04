@@ -8,7 +8,7 @@ import cereal.messaging as messaging
 from cereal import log
 from openpilot.common.params import Params
 from openpilot.selfdrive.locationd.calibrationd import Calibrator, INPUTS_NEEDED, INPUTS_WANTED, BLOCK_SIZE, MIN_SPEED_FILTER, \
-                                                         MAX_YAW_RATE_FILTER, SMOOTH_CYCLES, HEIGHT_INIT
+                                                         MAX_YAW_RATE_FILTER, SMOOTH_CYCLES, HEIGHT_INIT, MOUNTING_OFFSET_MIN_SAMPLES
 
 
 class TestCalibrationd(unittest.TestCase):
@@ -40,6 +40,72 @@ class TestCalibrationd(unittest.TestCase):
     np.testing.assert_allclose(c.rpy, np.zeros(3))
     np.testing.assert_allclose(c.height, HEIGHT_INIT)
     c.reset()
+
+  def test_reset_calibration(self):
+    c = Calibrator(param_put=False)
+    c.valid_blocks = INPUTS_NEEDED
+    c.rpy = np.array([0.01, 0.02, 0.03])
+    c.update_status()
+    self.assertEqual(c.cal_status, log.LiveCalibrationData.Status.calibrated)
+
+    c.reset_calibration()
+
+    self.assertEqual(c.cal_status, log.LiveCalibrationData.Status.uncalibrated)
+    self.assertEqual(c.valid_blocks, 0)
+    self.assertEqual(c.idx, 0)
+    np.testing.assert_allclose(c.rpy, np.zeros(3))
+
+  def test_mounting_offset_detection_does_not_change_calibration(self):
+    c = Calibrator(param_put=False)
+    c.valid_blocks = INPUTS_WANTED
+    c.update_status()
+    self.assertEqual(c.cal_status, log.LiveCalibrationData.Status.calibrated)
+
+    for _ in range(MOUNTING_OFFSET_MIN_SAMPLES):
+      c.handle_v_ego(MIN_SPEED_FILTER + 1)
+      c.handle_cam_odom([MIN_SPEED_FILTER + 1, np.tan(np.radians(1.0)) * (MIN_SPEED_FILTER + 1), 0.0],
+                        [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [1e-3, 1e-3, 1e-3],
+                        [0.0, 0.0, HEIGHT_INIT.item()], [1e-3, 1e-3, 1e-3])
+
+    self.assertTrue(c.mounting_offset_detected)
+    self.assertEqual(c.cal_status, log.LiveCalibrationData.Status.calibrated)
+
+  def test_startup_mounting_offset_starts_recalibration(self):
+    c = Calibrator(param_put=False)
+    c.valid_blocks = INPUTS_WANTED
+    c.update_status()
+    c.startup_mount_check_active = True
+
+    for _ in range(MOUNTING_OFFSET_MIN_SAMPLES):
+      c.handle_v_ego(MIN_SPEED_FILTER + 1)
+      c.handle_cam_odom([MIN_SPEED_FILTER + 1, np.tan(np.radians(1.0)) * (MIN_SPEED_FILTER + 1), 0.0],
+                        [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [1e-3, 1e-3, 1e-3],
+                        [0.0, 0.0, HEIGHT_INIT.item()], [1e-3, 1e-3, 1e-3])
+
+    self.assertFalse(c.startup_mount_check_active)
+    self.assertTrue(c.startup_recalibration_pending)
+    self.assertEqual(c.startup_voice_event, "recalibrating")
+    self.assertEqual(c.cal_status, log.LiveCalibrationData.Status.recalibrating)
+    self.assertEqual(c.valid_blocks, 1)
+
+  def test_startup_mounting_check_gates_engagement_until_passed(self):
+    c = Calibrator(param_put=False)
+    c.valid_blocks = INPUTS_WANTED
+    c.update_status()
+    c.startup_mount_check_active = True
+
+    self.assertEqual(c.cal_status, log.LiveCalibrationData.Status.calibrated)
+    self.assertEqual(c.get_msg().liveCalibration.calStatus, log.LiveCalibrationData.Status.uncalibrated)
+
+    for _ in range(MOUNTING_OFFSET_MIN_SAMPLES):
+      c.handle_v_ego(MIN_SPEED_FILTER + 1)
+      c.handle_cam_odom([MIN_SPEED_FILTER + 1, 0.0, 0.0],
+                        [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [1e-3, 1e-3, 1e-3],
+                        [0.0, 0.0, HEIGHT_INIT.item()], [1e-3, 1e-3, 1e-3])
+
+    self.assertFalse(c.startup_mount_check_active)
+    self.assertEqual(c.startup_voice_event, "check_passed")
+    self.assertEqual(c.get_msg().liveCalibration.calStatus, log.LiveCalibrationData.Status.calibrated)
 
 
   def test_calibration_low_speed_reject(self):

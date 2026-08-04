@@ -158,6 +158,58 @@
         <translation>序列号</translation>
     </message>
     <message>
+        <source>Calibration Status</source>
+        <translation>校准状态</translation>
+    </message>
+    <message>
+        <source>Waiting for data</source>
+        <translation>等待数据</translation>
+    </message>
+    <message>
+        <source>Pitch Offset</source>
+        <translation>俯仰偏移</translation>
+    </message>
+    <message>
+        <source>Yaw Offset</source>
+        <translation>偏航偏移</translation>
+    </message>
+    <message>
+        <source>Reset requested</source>
+        <translation>已请求重置</translation>
+    </message>
+    <message>
+        <source>Collecting data</source>
+        <translation>正在收集数据</translation>
+    </message>
+    <message>
+        <source>Calibrating</source>
+        <translation>正在校准</translation>
+    </message>
+    <message>
+        <source>Checking device position</source>
+        <translation>正在检查设备位置</translation>
+    </message>
+    <message>
+        <source>Recalibrating</source>
+        <translation>正在重新校准</translation>
+    </message>
+    <message>
+        <source>Calibrated</source>
+        <translation>校准完成</translation>
+    </message>
+    <message>
+        <source>Invalid</source>
+        <translation>校准不通过</translation>
+    </message>
+    <message>
+        <source>%1 — %2%</source>
+        <translation>%1 — %2%</translation>
+    </message>
+    <message>
+        <source>%1° (%2)</source>
+        <translation>%1°（%2）</translation>
+    </message>
+    <message>
         <source>Driver Camera</source>
         <translation>驾驶员摄像头</translation>
     </message>
@@ -480,6 +532,62 @@
     <message>
         <source> ALERT</source>
         <translation> 警报</translation>
+    </message>
+    <message>
+        <source>Live Calibration</source>
+        <translation>实时校准</translation>
+    </message>
+    <message>
+        <source>Waiting for data</source>
+        <translation>等待数据</translation>
+    </message>
+    <message>
+        <source>Pitch: N/A</source>
+        <translation>俯仰：暂无</translation>
+    </message>
+    <message>
+        <source>Yaw: N/A</source>
+        <translation>偏航：暂无</translation>
+    </message>
+    <message>
+        <source>Calibrating</source>
+        <translation>正在校准</translation>
+    </message>
+    <message>
+        <source>Recalibrating</source>
+        <translation>正在重新校准</translation>
+    </message>
+    <message>
+        <source>Calibrated</source>
+        <translation>校准完成</translation>
+    </message>
+    <message>
+        <source>Invalid calibration</source>
+        <translation>校准不通过</translation>
+    </message>
+    <message>
+        <source>Pitch: %1° %2</source>
+        <translation>俯仰：%1° %2</translation>
+    </message>
+    <message>
+        <source>Yaw: %1° %2</source>
+        <translation>偏航：%1° %2</translation>
+    </message>
+    <message>
+        <source>down</source>
+        <translation>朝下</translation>
+    </message>
+    <message>
+        <source>up</source>
+        <translation>朝上</translation>
+    </message>
+    <message>
+        <source>left</source>
+        <translation>朝左</translation>
+    </message>
+    <message>
+        <source>right</source>
+        <translation>朝右</translation>
     </message>
 </context>
 <context>

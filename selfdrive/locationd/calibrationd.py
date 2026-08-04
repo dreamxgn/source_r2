@@ -32,6 +32,11 @@ BLOCK_SIZE = 100
 INPUTS_NEEDED = 5   # Minimum blocks needed for valid calibration
 INPUTS_WANTED = 50   # We want a little bit more than we need for stability
 MAX_ALLOWED_SPREAD = np.radians(2)
+MOUNTING_OFFSET_PITCH_THRESHOLD = np.radians(1.5)
+MOUNTING_OFFSET_YAW_THRESHOLD = np.radians(0.8)
+MOUNTING_OFFSET_PITCH_CLEAR = np.radians(1.0)
+MOUNTING_OFFSET_YAW_CLEAR = np.radians(0.5)
+MOUNTING_OFFSET_MIN_SAMPLES = 20
 RPY_INIT = np.array([0.0,0.0,0.0])
 WIDE_FROM_DEVICE_EULER_INIT = np.array([0.0, 0.0, 0.0])
 HEIGHT_INIT = np.array([1.22])
@@ -84,6 +89,17 @@ class Calibrator:
 
     self.reset(rpy_init, valid_blocks, wide_from_device_euler, height)
     self.update_status()
+    self.startup_mount_check_active = bool(param_put and calibration_params and
+                                           valid_blocks >= INPUTS_NEEDED and is_calibration_valid(rpy_init))
+    self.startup_recalibration_pending = False
+    self.startup_voice_event = "initial_calibrating" if param_put and valid_blocks < INPUTS_NEEDED else None
+
+  def reset_calibration(self) -> None:
+    self.startup_mount_check_active = False
+    self.startup_recalibration_pending = False
+    self.cal_status = log.LiveCalibrationData.Status.uncalibrated
+    self.reset()
+    self.update_status()
 
   def reset(self, rpy_init: np.ndarray = RPY_INIT,
                   valid_blocks: int = 0,
@@ -117,6 +133,7 @@ class Calibrator:
     self.idx = 0
     self.block_idx = 0
     self.v_ego = 0.0
+    self.mounting_offset_detected = False
 
     if smooth_from is None:
       self.old_rpy = RPY_INIT
@@ -216,6 +233,39 @@ class Calibrator:
                                                                                 new_wide_from_device_euler, self.idx, float(BLOCK_SIZE))
     self.heights[self.block_idx] = moving_avg_with_linear_decay(self.heights[self.block_idx], new_height, self.idx, float(BLOCK_SIZE))
 
+    # Detect a sustained change from the accepted calibration. During startup
+    # this decides whether the cached calibration can be trusted; afterward it
+    # only drives the informational mounting-offset voice reminder.
+    samples_in_block = self.idx + 1
+    if self.cal_status == log.LiveCalibrationData.Status.calibrated and samples_in_block >= MOUNTING_OFFSET_MIN_SAMPLES:
+      delta = np.abs(self.rpys[self.block_idx] - self.rpy)
+      if not self.mounting_offset_detected:
+        self.mounting_offset_detected = (delta[1] > MOUNTING_OFFSET_PITCH_THRESHOLD or
+                                         delta[2] > MOUNTING_OFFSET_YAW_THRESHOLD)
+      elif delta[1] < MOUNTING_OFFSET_PITCH_CLEAR and delta[2] < MOUNTING_OFFSET_YAW_CLEAR:
+        self.mounting_offset_detected = False
+
+      if self.startup_mount_check_active and self.mounting_offset_detected:
+        # A cached calibration exists, but the current mounting position no
+        # longer matches it. Seed recalibration from the recent observation.
+        old_rpy = self.rpy.copy()
+        new_mount_rpy = self.rpys[self.block_idx].copy()
+        new_mount_wide = self.wide_from_device_eulers[self.block_idx].copy()
+        new_mount_height = self.heights[self.block_idx].copy()
+        self.reset(new_mount_rpy, valid_blocks=1,
+                   wide_from_device_euler_init=new_mount_wide,
+                   height_init=new_mount_height, smooth_from=old_rpy)
+        self.cal_status = log.LiveCalibrationData.Status.recalibrating
+        self.startup_mount_check_active = False
+        self.startup_recalibration_pending = True
+        self.startup_voice_event = "recalibrating"
+        return new_rpy
+      elif self.startup_mount_check_active:
+        # The startup mounting check passed. The cached calibration can now be
+        # exposed as calibrated and controls may be engaged.
+        self.startup_mount_check_active = False
+        self.startup_voice_event = "check_passed"
+
     self.idx = (self.idx + 1) % BLOCK_SIZE
     if self.idx == 0:
       self.block_idx += 1
@@ -239,6 +289,13 @@ class Calibrator:
     liveCalibration.rpyCalibSpread = self.calib_spread.tolist()
     liveCalibration.wideFromDeviceEuler = self.wide_from_device_euler.tolist()
     liveCalibration.height = self.height.tolist()
+
+    # Gate engagement while verifying that the device still matches the saved
+    # mounting position. Keep the internal cached calibration intact so it can
+    # be used as the comparison baseline.
+    if self.startup_mount_check_active:
+      liveCalibration.calStatus = log.LiveCalibrationData.Status.uncalibrated
+      liveCalibration.calPerc = min(99., 100. * self.idx / MOUNTING_OFFSET_MIN_SAMPLES)
 
     if self.not_car:
       liveCalibration.validBlocks = INPUTS_NEEDED
@@ -264,10 +321,27 @@ def calibrationd_thread(sm: Optional[messaging.SubMaster] = None, pm: Optional[m
     pm = messaging.PubMaster(['liveCalibration'])
 
   calibrator = Calibrator(param_put=True)
+  params = Params()
+  mounting_offset_prev = calibrator.mounting_offset_detected
+  startup_mount_check_prev = calibrator.startup_mount_check_active
+  params.put_bool("MountingOffsetDetected", mounting_offset_prev)
+  params.put_bool("StartupMountingCheckActive", startup_mount_check_prev)
+  params.remove("StartupCalibrationResult")
+  if calibrator.startup_voice_event is not None:
+    params.put("StartupCalibrationResult", calibrator.startup_voice_event)
+    calibrator.startup_voice_event = None
 
   while 1:
     timeout = 0 if sm.frame == -1 else 100
     sm.update(timeout)
+
+    if params.get_bool("ResetCalibration"):
+      # Clear both the in-memory state and any cached state that may have been
+      # queued for writing immediately before the reset request.
+      calibrator.reset_calibration()
+      params.remove("CalibrationParams")
+      params.remove("ResetCalibration")
+      calibrator.send_data(pm)
 
     calibrator.not_car = sm['carParams'].notCar
 
@@ -280,8 +354,28 @@ def calibrationd_thread(sm: Optional[messaging.SubMaster] = None, pm: Optional[m
                                            sm['cameraOdometry'].roadTransformTrans,
                                            sm['cameraOdometry'].roadTransformTransStd)
 
+      if calibrator.mounting_offset_detected != mounting_offset_prev:
+        mounting_offset_prev = calibrator.mounting_offset_detected
+        params.put_bool("MountingOffsetDetected", mounting_offset_prev)
+
+      if calibrator.startup_recalibration_pending:
+        if calibrator.cal_status == log.LiveCalibrationData.Status.calibrated:
+          params.put("StartupCalibrationResult", "success")
+          calibrator.startup_recalibration_pending = False
+        elif calibrator.cal_status == log.LiveCalibrationData.Status.invalid:
+          params.put("StartupCalibrationResult", "failure")
+          calibrator.startup_recalibration_pending = False
+
+      if calibrator.startup_voice_event is not None:
+        params.put("StartupCalibrationResult", calibrator.startup_voice_event)
+        calibrator.startup_voice_event = None
+
       if DEBUG and new_rpy is not None:
         print('got new rpy', new_rpy)
+
+    if calibrator.startup_mount_check_active != startup_mount_check_prev:
+      startup_mount_check_prev = calibrator.startup_mount_check_active
+      params.put_bool("StartupMountingCheckActive", startup_mount_check_prev)
 
     # 4Hz driven by cameraOdometry
     if sm.frame % 5 == 0:

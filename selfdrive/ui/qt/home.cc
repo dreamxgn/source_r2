@@ -1,5 +1,7 @@
 #include "selfdrive/ui/qt/home.h"
 
+#include <cmath>
+
 #include <QHBoxLayout>
 #include <QMouseEvent>
 #include <QStackedWidget>
@@ -69,14 +71,14 @@ void HomeWindow::updateState(const UIState &s) {
   }
 }
 
-void HomeWindow::offroadTransition(bool offroad) {
+void HomeWindow::offroadTransition(bool /*offroad*/) {
   body->setEnabled(false);
-  sidebar->setVisible(offroad);
-  if (offroad) {
-    slayout->setCurrentWidget(home);
-  } else {
-    slayout->setCurrentWidget(onroad);
-  }
+  // Keep the configuration UI visible while driving.  In particular, never
+  // show OnroadWindow: its camera widget starts a VisionIPC thread and renders
+  // every road-camera frame, which makes remote control over scrcpy sluggish.
+  // The driving processes are unaffected; this only disables the UI preview.
+  sidebar->show();
+  slayout->setCurrentWidget(home);
 }
 
 void HomeWindow::showDriverView(bool show) {
@@ -171,6 +173,34 @@ OffroadHome::OffroadHome(QWidget* parent) : QFrame(parent) {
     right_widget->setFixedWidth(750);
     right_column->setSpacing(30);
 
+    QFrame *calibration_widget = new QFrame(this);
+    calibration_widget->setObjectName("calibration_widget");
+    QVBoxLayout *calibration_layout = new QVBoxLayout(calibration_widget);
+    calibration_layout->setContentsMargins(32, 22, 32, 22);
+    calibration_layout->setSpacing(10);
+
+    QLabel *calibration_title = new QLabel(tr("Live Calibration"));
+    calibration_title->setObjectName("calibration_title");
+    calibration_status = new QLabel(tr("Waiting for data"));
+    calibration_status->setObjectName("calibration_status");
+    calibration_progress = new QProgressBar;
+    calibration_progress->setRange(0, 100);
+    calibration_progress->setValue(0);
+    calibration_progress->setTextVisible(true);
+
+    QHBoxLayout *angles_layout = new QHBoxLayout;
+    calibration_pitch = new QLabel(tr("Pitch: N/A"));
+    calibration_yaw = new QLabel(tr("Yaw: N/A"));
+    calibration_yaw->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    angles_layout->addWidget(calibration_pitch);
+    angles_layout->addWidget(calibration_yaw);
+
+    calibration_layout->addWidget(calibration_title);
+    calibration_layout->addWidget(calibration_status);
+    calibration_layout->addWidget(calibration_progress);
+    calibration_layout->addLayout(angles_layout);
+    right_column->addWidget(calibration_widget, 1);
+
     ExperimentalModeButton *experimental_mode = new ExperimentalModeButton(this);
     QObject::connect(experimental_mode, &ExperimentalModeButton::openSettings, this, &OffroadHome::openSettings);
     right_column->addWidget(experimental_mode, 1);
@@ -196,6 +226,9 @@ OffroadHome::OffroadHome(QWidget* parent) : QFrame(parent) {
   // set up refresh timer
   timer = new QTimer(this);
   timer->callOnTimeout(this, &OffroadHome::refresh);
+  connect(uiState(), &UIState::uiUpdate, this, [=](const UIState &) {
+    updateCalibrationDisplay();
+  });
 
   setStyleSheet(R"(
     * {
@@ -213,7 +246,71 @@ OffroadHome::OffroadHome(QWidget* parent) : QFrame(parent) {
     OffroadHome > QLabel {
       font-size: 55px;
     }
+    #calibration_widget {
+      background-color: #292929;
+      border-radius: 12px;
+    }
+    #calibration_status, #calibration_widget QLabel {
+      font-size: 28px;
+    }
+    #calibration_title {
+      font-size: 38px;
+      font-weight: 600;
+    }
+    QProgressBar {
+      height: 34px;
+      border: 2px solid #555555;
+      border-radius: 8px;
+      background-color: #111111;
+      text-align: center;
+      font-size: 22px;
+    }
+    QProgressBar::chunk {
+      border-radius: 6px;
+      background-color: #00C853;
+    }
   )");
+}
+
+void OffroadHome::updateCalibrationDisplay() {
+  const SubMaster &sm = *(uiState()->sm);
+  if (sm.rcv_frame("liveCalibration") == 0) {
+    return;
+  }
+
+  const auto calib = sm["liveCalibration"].getLiveCalibration();
+  const auto rpy = calib.getRpyCalib();
+  QString status;
+  switch (calib.getCalStatus()) {
+    case cereal::LiveCalibrationData::Status::UNCALIBRATED:
+      status = tr("Calibrating");
+      break;
+    case cereal::LiveCalibrationData::Status::RECALIBRATING:
+      status = tr("Recalibrating");
+      break;
+    case cereal::LiveCalibrationData::Status::CALIBRATED:
+      status = tr("Calibrated");
+      break;
+    case cereal::LiveCalibrationData::Status::INVALID:
+      status = tr("Invalid calibration");
+      break;
+  }
+  if (params.getBool("StartupMountingCheckActive")) {
+    status = tr("Checking device position");
+  }
+  calibration_status->setText(status);
+  calibration_progress->setValue(static_cast<int>(std::round(calib.getCalPerc())));
+
+  if (rpy.size() == 3) {
+    const double pitch = rpy[1] * (180.0 / M_PI);
+    const double yaw = rpy[2] * (180.0 / M_PI);
+    calibration_pitch->setText(tr("Pitch: %1° %2")
+                                 .arg(std::abs(pitch), 0, 'f', 2)
+                                 .arg(pitch > 0 ? tr("down") : tr("up")));
+    calibration_yaw->setText(tr("Yaw: %1° %2")
+                               .arg(std::abs(yaw), 0, 'f', 2)
+                               .arg(yaw > 0 ? tr("left") : tr("right")));
+  }
 }
 
 void OffroadHome::showEvent(QShowEvent *event) {

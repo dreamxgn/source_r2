@@ -90,7 +90,7 @@ class LongitudinalPlanner:
     self.dp_long_use_krkeegen_tune = self.params.get_bool('dp_long_use_krkeegen_tune')
 
   @staticmethod
-  def parse_model(model_msg, model_error, v_ego, taco=False):
+  def parse_model(model_msg, model_error):
     if (len(model_msg.position.x) == 33 and
       len(model_msg.velocity.x) == 33 and
       len(model_msg.acceleration.x) == 33):
@@ -104,15 +104,9 @@ class LongitudinalPlanner:
       a = np.zeros(len(T_IDXS_MPC))
       j = np.zeros(len(T_IDXS_MPC))
 
-    # rick - taco tune
-    if taco:
-      max_lat_accel = interp(v_ego, [5, 10, 20], [1.5, 2.0, 3.0])
-      curvatures = np.interp(T_IDXS_MPC, ModelConstants.T_IDXS, model_msg.orientationRate.z) / np.clip(v, 0.3, 100.0)
-      max_v = np.sqrt(max_lat_accel / (np.abs(curvatures) + 1e-3)) - 2.0
-      v = np.minimum(max_v, v)
     return x, v, a, j
 
-  def update(self, sm):
+  def update(self, sm, lateral_path=None):
     if self.param_read_counter % 50 == 0:
       self.read_param()
 
@@ -163,7 +157,7 @@ class LongitudinalPlanner:
 
     # Get acceleration and active solutions for custom long mpc.
     self.cruise_source, a_min_sol, v_cruise_sol = self.cruise_solutions(not reset_state, self.v_desired_filter.x,
-                                                                        self.a_desired, v_cruise, sm)
+                                                                        self.a_desired, v_cruise, sm, lateral_path)
     if force_slow_decel:
       v_cruise_sol = 0.0
     # clip limits, cannot init MPC outside of bounds
@@ -173,7 +167,9 @@ class LongitudinalPlanner:
     self.mpc.set_weights(prev_accel_constraint, personality=self.personality)
     self.mpc.set_accel_limits(accel_limits_turns[0], accel_limits_turns[1])
     self.mpc.set_cur_state(self.v_desired_filter.x, self.a_desired)
-    x, v, a, j = self.parse_model(sm['modelV2'], self.v_model_error, v_ego, taco=True)
+    # Vision turn speed control is handled by VisionTurnController. Keeping the
+    # model trajectory unmodified avoids a second, always-on curvature limiter.
+    x, v, a, j = self.parse_model(sm['modelV2'], self.v_model_error)
     self.dp_long_use_krkeegen_tune_active = self.dp_long_use_krkeegen_tune and v_ego <= 7.5
     self.dp_long_use_df_tune_active = self.dp_long_use_df_tune and sm['radarState'].leadOne.status
     self.mpc.update(sm['radarState'], v_cruise_sol, x, v, a, j, personality=self.personality, use_df_tune=self.dp_long_use_df_tune_active, use_krkeegen_tune=self.dp_long_use_krkeegen_tune_active)
@@ -230,9 +226,9 @@ class LongitudinalPlanner:
     pm.send('longitudinalPlanExt', plan_ext_send)
 
   # mapd
-  def cruise_solutions(self, enabled, v_ego, a_ego, v_cruise, sm):
+  def cruise_solutions(self, enabled, v_ego, a_ego, v_cruise, sm, lateral_path=None):
     # Update controllers
-    self.vision_turn_controller.update(enabled, v_ego, a_ego, v_cruise, sm)
+    self.vision_turn_controller.update(enabled, v_ego, a_ego, v_cruise, sm, lateral_path)
 
     # Pick solution with lowest velocity target.
     a_solutions = {'cruise': float("inf")}

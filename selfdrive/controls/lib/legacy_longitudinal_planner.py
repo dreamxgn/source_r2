@@ -80,7 +80,7 @@ class LongitudinalPlanner:
     self.dp_long_use_df_tune = self.params.get_bool('dp_long_use_df_tune')
     self.dp_long_use_krkeegen_tune = self.params.get_bool('dp_long_use_krkeegen_tune')
 
-  def update(self, sm):
+  def update(self, sm, lateral_path=None):
     if self.param_read_counter % 50 == 0:
       self.read_param()
 
@@ -114,7 +114,7 @@ class LongitudinalPlanner:
 
     # Get acceleration and active solutions for custom long mpc.
     self.cruise_source, a_min_sol, v_cruise_sol = self.cruise_solutions(not reset_state, self.v_desired_filter.x,
-                                                                        self.a_desired, v_cruise, sm)
+                                                                        self.a_desired, v_cruise, sm, lateral_path)
 
     accel_limits = [A_CRUISE_MIN, get_max_accel(v_ego)]
 
@@ -188,9 +188,9 @@ class LongitudinalPlanner:
     pm.send('longitudinalPlanExt', plan_ext_send)
 
   # mapd
-  def cruise_solutions(self, enabled, v_ego, a_ego, v_cruise, sm):
+  def cruise_solutions(self, enabled, v_ego, a_ego, v_cruise, sm, lateral_path=None):
     # Update controllers
-    self.vision_turn_controller.update(enabled, v_ego, a_ego, v_cruise, sm)
+    self.vision_turn_controller.update(enabled, v_ego, a_ego, v_cruise, sm, lateral_path)
 
     # Pick solution with lowest velocity target.
     a_solutions = {'cruise': float("inf")}

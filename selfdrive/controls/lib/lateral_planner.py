@@ -75,6 +75,10 @@ class LateralPlanner:
     self.x0 = x0
     self.lat_mpc.reset(x0=self.x0)
 
+  @property
+  def d_path_w_lines_xyz(self):
+    return self._d_path_w_lines_xyz
+
   def update(self, sm):
     # clip speed , lateral planning is not possible at 0 speed
     self.v_ego = max(MIN_SPEED, sm['carState'].vEgo)

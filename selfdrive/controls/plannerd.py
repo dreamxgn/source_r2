@@ -62,7 +62,7 @@ def plannerd_thread(sm=None, pm=None):
     if sm.updated['modelV2']:
       lateral_planner.update(sm)
       lateral_planner.publish(sm, pm)
-      longitudinal_planner.update(sm)
+      longitudinal_planner.update(sm, lateral_planner.d_path_w_lines_xyz)
       longitudinal_planner.publish(sm, pm)
       # if not is_old_model:
       #   publish_ui_plan(sm, pm, lateral_planner, longitudinal_planner)

@@ -58,6 +58,10 @@ class LateralPlanner:
     self.x0 = x0
     self.lat_mpc.reset(x0=self.x0)
 
+  @property
+  def d_path_w_lines_xyz(self):
+    return self._d_path_w_lines_xyz
+
   def update(self, sm):
     v_ego = sm['carState'].vEgo
     measured_curvature = sm['controlsState'].curvature

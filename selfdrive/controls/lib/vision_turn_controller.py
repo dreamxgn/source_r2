@@ -2,12 +2,8 @@ import numpy as np
 import math
 from cereal import custom
 from openpilot.common.numpy_fast import interp
-# from openpilot.common.params import Params
-# from common.realtime import sec_since_boot
 from openpilot.common.conversions import Conversions as CV
-# from selfdrive.controls.lib.lane_planner import TRAJECTORY_SIZE
 from openpilot.selfdrive.controls.lib.drive_helpers import V_CRUISE_MAX
-import cereal.messaging as messaging
 
 TRAJECTORY_SIZE = 33
 _MIN_V = 5.6  # Do not operate under 20km/h
@@ -21,9 +17,11 @@ _LEAVING_LAT_ACC_TH = 1.3  # Lat Acc threshold to trigger leaving turn state.
 _FINISH_LAT_ACC_TH = 1.1  # Lat Acc threshold to trigger end of turn cycle.
 
 _EVAL_STEP = 5.  # mts. Resolution of the curvature evaluation.
-_EVAL_START = 20.  # mts. Distance ahead where to start evaluating vision curvature.
+_EVAL_START = 5.  # mts. Distance ahead where to start evaluating vision curvature.
 _EVAL_LENGHT = 150.  # mts. Distance ahead where to stop evaluating vision curvature.
-_EVAL_RANGE = np.arange(_EVAL_START, _EVAL_LENGHT, _EVAL_STEP)
+_EVAL_HORIZON_TIME = 6.  # s. Speed-dependent vision horizon.
+_EVAL_MIN_LENGHT = 60.  # mts. Minimum vision horizon when enough path is available.
+_MIN_PATH_POINTS = 6
 
 _A_LAT_REG_MAX = 2.  # Maximum lateral acceleration
 
@@ -55,17 +53,20 @@ def _debug(msg):
 VisionTurnControllerState = custom.LongitudinalPlanExt.VisionTurnControllerState
 
 
-def eval_curvature(poly, x_vals):
+def eval_curvature(path_x, path_y, x_vals):
   """
-  This function returns a vector with the curvature based on path defined by `poly`
-  evaluated on distance vector `x_vals`
-  """
-  # https://en.wikipedia.org/wiki/Curvature#  Local_expressions
-  def curvature(x):
-    a = abs(2 * poly[1] + 6 * poly[0] * x) / (1 + (3 * poly[0] * x**2 + 2 * poly[1] * x + poly[2])**2)**(1.5)
-    return a
+  Return absolute curvature for a discrete path evaluated at `x_vals`.
 
-  return np.vectorize(curvature)(x_vals)
+  Resampling before taking derivatives avoids extrapolating a global polynomial
+  beyond the model's valid spatial horizon and handles S-curves more naturally.
+  """
+  path_x = np.asarray(path_x, dtype=float)
+  path_y = np.asarray(path_y, dtype=float)
+  x_vals = np.asarray(x_vals, dtype=float)
+  y_vals = np.interp(x_vals, path_x, path_y)
+  dy = np.gradient(y_vals, x_vals)
+  ddy = np.gradient(dy, x_vals)
+  return np.abs(ddy) / np.power(1. + np.square(dy), 1.5)
 
 
 def eval_lat_acc(v_ego, x_curv):
@@ -99,15 +100,12 @@ class VisionTurnController():
     self._op_enabled = False
     self._gas_pressed = False
     self._is_enabled = False
-    self._last_params_update = 0.
     self._v_cruise_setpoint = 0.
     self._v_ego = 0.
     self._a_ego = 0.
     self._a_target = 0.
     self._v_overshoot = 0.
     self._state = VisionTurnControllerState.disabled
-    self._sm = messaging.SubMaster(['lateralPlanExt'])
-
     self._reset()
 
   @property
@@ -130,12 +128,17 @@ class VisionTurnController():
   def v_turn(self):
     if not self.is_active:
       return self._v_cruise_setpoint
-    return self._v_overshoot if self._lat_acc_overshoot_ahead \
+    v_turn = self._v_overshoot if self._lat_acc_overshoot_ahead \
       else self._v_ego + self._a_target * _NO_OVERSHOOT_TIME_HORIZON
+    return min(max(v_turn, 0.), self._v_cruise_setpoint)
 
   @property
   def is_active(self):
     return self._state != VisionTurnControllerState.disabled
+
+  @property
+  def is_enabled(self):
+    return self._is_enabled
 
   def _reset(self):
     self._current_lat_acc = 0.
@@ -143,10 +146,23 @@ class VisionTurnController():
     self._max_pred_lat_acc = 0.
     self._v_overshoot_distance = 200.
     self._lat_acc_overshoot_ahead = False
+    self._path_source = 'invalid'
 
-  def _update_calculations(self, sm):
-    # Get path polynomial aproximation for curvature estimation from model data.
-    path_poly = None
+  @property
+  def path_source(self):
+    return self._path_source
+
+  @staticmethod
+  def _valid_path(path_x, path_y):
+    path_x = np.asarray(path_x, dtype=float)
+    path_y = np.asarray(path_y, dtype=float)
+    return len(path_x) == len(path_y) and len(path_x) >= _MIN_PATH_POINTS and \
+      np.isfinite(path_x).all() and np.isfinite(path_y).all() and \
+      np.all(np.diff(path_x) > 0.) and path_x[-1] >= _EVAL_START + (2. * _EVAL_STEP)
+
+  def _update_calculations(self, sm, fallback_path=None):
+    path_x = None
+    path_y = None
     model_data = sm['modelV2']
 
     # 1. When the probability of lanes is good enough, compute polynomial from lanes as they are way more stable
@@ -177,29 +193,45 @@ class VisionTurnController():
       r_prob *= r_std_mod
 
       # Find path from lanes as the average center lane only if min probability on both lanes is above threshold.
-      if l_prob > _MIN_LANE_PROB and r_prob > _MIN_LANE_PROB:
+      if l_prob > _MIN_LANE_PROB and r_prob > _MIN_LANE_PROB and self._valid_path(ll_x, lll_y) and self._valid_path(ll_x, rll_y):
         c_y = width_pts / 2 + lll_y
-        path_poly = np.polyfit(ll_x, c_y, 3)
+        path_x = np.asarray(ll_x, dtype=float)
+        path_y = c_y
+        self._path_source = 'laneLines'
 
-    # 2. If not polynomial derived from lanes, then derive it from compensated driving path with lanes as
-    # provided by `lateralPlanner`.
-    lat_planner_data = self._sm['lateralPlanExt']
-    self._sm.update(0)
-    if path_poly is None and lat_planner_data is not None and len(lat_planner_data.dPathWLinesX) > 0 \
-        and lat_planner_data.dPathWLinesX[0] > 0:
-      path_poly = np.polyfit(lat_planner_data.dPathWLinesX, lat_planner_data.dPathWLinesY, 3)
+    # 2. Fall back to the current compensated driving path from lateralPlanner.
+    if path_x is None and fallback_path is not None:
+      fallback_path = np.asarray(fallback_path, dtype=float)
+      if fallback_path.ndim == 2 and fallback_path.shape[1] >= 2 and \
+          self._valid_path(fallback_path[:, 0], fallback_path[:, 1]):
+        path_x = fallback_path[:, 0]
+        path_y = fallback_path[:, 1]
+        self._path_source = 'modelPath'
 
-    # 3. If no polynomial derived from lanes or driving path, then provide a straight line poly.
-    if path_poly is None:
-      path_poly = np.array([0., 0., 0., 0.])
-
-    current_curvature = abs(
-      sm['carState'].steeringAngleDeg * CV.DEG_TO_RAD / (self._CP.steerRatio * self._CP.wheelbase))
+    controls_curvature = sm['controlsState'].curvature
+    if math.isfinite(controls_curvature):
+      current_curvature = abs(controls_curvature)
+    else:
+      current_curvature = abs(
+        sm['carState'].steeringAngleDeg * CV.DEG_TO_RAD / (self._CP.steerRatio * self._CP.wheelbase))
     self._current_lat_acc = current_curvature * self._v_ego**2
     self._max_v_for_current_curvature = math.sqrt(_A_LAT_REG_MAX / current_curvature) if current_curvature > 0 \
       else V_CRUISE_MAX * CV.KPH_TO_MS
 
-    pred_curvatures = eval_curvature(path_poly, _EVAL_RANGE)
+    if path_x is None:
+      self._path_source = 'invalid'
+      self._max_pred_lat_acc = 0.
+      self._lat_acc_overshoot_ahead = False
+      return
+
+    eval_end = min(path_x[-1], _EVAL_LENGHT, max(_EVAL_MIN_LENGHT, self._v_ego * _EVAL_HORIZON_TIME))
+    eval_range = np.arange(_EVAL_START, eval_end + 0.5 * _EVAL_STEP, _EVAL_STEP)
+    if len(eval_range) < 3:
+      self._max_pred_lat_acc = 0.
+      self._lat_acc_overshoot_ahead = False
+      return
+
+    pred_curvatures = eval_curvature(path_x, path_y, eval_range)
     max_pred_curvature = np.amax(pred_curvatures)
     self._max_pred_lat_acc = self._v_ego**2 * max_pred_curvature
 
@@ -208,8 +240,9 @@ class VisionTurnController():
     self._lat_acc_overshoot_ahead = len(lat_acc_overshoot_idxs) > 0
 
     if self._lat_acc_overshoot_ahead:
+      max_curvature_idx = int(np.argmax(pred_curvatures))
       self._v_overshoot = min(math.sqrt(_A_LAT_REG_MAX / max_pred_curvature), self._v_cruise_setpoint)
-      self._v_overshoot_distance = max(lat_acc_overshoot_idxs[0] * _EVAL_STEP + _EVAL_START, _EVAL_STEP)
+      self._v_overshoot_distance = max(eval_range[max_curvature_idx], _EVAL_STEP)
       _debug(f'TVC: High LatAcc. Dist: {self._v_overshoot_distance:.2f}, v: {self._v_overshoot * CV.MS_TO_KPH:.2f}')
 
   def _state_transition(self):
@@ -276,15 +309,14 @@ class VisionTurnController():
     # update solution values.
     self._a_target = a_target
 
-  def update(self, enabled, v_ego, a_ego, v_cruise_setpoint, sm):
+  def update(self, enabled, v_ego, a_ego, v_cruise_setpoint, sm, fallback_path=None):
     self._op_enabled = enabled
     self._gas_pressed = sm['carState'].gasPressed
     self._v_ego = v_ego
     self._a_ego = a_ego
     self._v_cruise_setpoint = v_cruise_setpoint
 
-    # self._update_params()
-    self._update_calculations(sm)
+    self._update_calculations(sm, fallback_path)
     self._state_transition()
     self._update_solution()
 

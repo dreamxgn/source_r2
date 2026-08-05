@@ -43,13 +43,44 @@ class MobileAPI:
   def get_status(self) -> Dict[str, Any]:
     return self.status_provider.status()
 
-  def get_params(self) -> Dict[str, Dict[str, str]]:
+  def get_params(self) -> Dict[str, Any]:
     values = {}
     for key in sorted(SUPPORTED_PARAMS):
       value = decode_param(self.params, key)
       if value is not None:
         values[key] = value
-    return {"values": values}
+    context = self.status_provider.parameter_context() if hasattr(self.status_provider, "parameter_context") else {}
+    states = {key: self._parameter_state(key, values, context) for key in SUPPORTED_PARAMS}
+    return {"values": values, "states": states}
+
+  def _parameter_state(self, key: str, values: Dict[str, str],
+                       context: Dict[str, Any]) -> Dict[str, bool]:
+    visible = True
+    enabled = not self._get_bool(key + "Lock")
+    old_model = values.get("dp_0813") == "1"
+
+    if key in ("ExperimentalMode", "ExperimentalLongitudinalEnabled") and old_model:
+      visible = False
+    elif key == "ExperimentalLongitudinalEnabled" and context.get("hasCarParams"):
+      visible = bool(context.get("experimentalLongitudinalAvailable")) and not bool(context.get("isReleaseBranch"))
+    elif key == "ExperimentalLongitudinalEnabled":
+      visible = False
+
+    if key in ("ExperimentalMode", "LongitudinalPersonality") and context.get("hasCarParams") and not old_model:
+      enabled = enabled and bool(context.get("hasLongitudinalControl"))
+
+    if key == "dp_device_auto_shutdown_in":
+      visible = values.get("dp_device_auto_shutdown") == "1"
+    elif key == "dp_lat_lane_priority_mode_speed_based":
+      visible = values.get("dp_lat_lane_priority_mode") == "1"
+
+    return {"visible": visible, "enabled": enabled}
+
+  def _get_bool(self, key: str) -> bool:
+    try:
+      return decode_param(self.params, key) == "1"
+    except Exception:
+      return False
 
   def put_param(self, key: str, value: Any) -> Dict[str, str]:
     if key not in SUPPORTED_PARAMS:
@@ -57,6 +88,12 @@ class MobileAPI:
     if not isinstance(value, str) or len(value) > 128:
       raise ValueError("value must be a string of at most 128 characters")
     self.params.put(key, value)
+    if key == "dp_0813" and value == "1":
+      for incompatible_key in ("ExperimentalMode", "ExperimentalLongitudinalEnabled"):
+        try:
+          self.params.remove(incompatible_key)
+        except (AttributeError, KeyError):
+          pass
     return {"value": value}
 
 

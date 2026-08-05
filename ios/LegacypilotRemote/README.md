@@ -60,10 +60,14 @@ failed user-initiated connection.
 
 ### Parameters
 
-- `GET /api/v1/params` returns `{ "values": { "dp_alka": "0" } }`.
+- `GET /api/v1/params` returns parameter values plus device-derived visibility
+  and enabled states, for example
+  `{ "values": { "dp_alka": "0" }, "states": { "dp_alka": { "visible": true, "enabled": true } } }`.
 - `PUT /api/v1/params/{key}` accepts `{ "value": "1" }` and returns the
   updated value using the same body.
 
 All parameter values use their existing on-device string representation. The
 API exposes the settings editable in the device UI, not internal cache or
-registration parameters.
+registration parameters. The device computes dependencies from the selected
+model, vehicle capabilities, release branch, and parameter locks; the client
+refreshes these constraints after every write.

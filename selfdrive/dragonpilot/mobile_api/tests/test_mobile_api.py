@@ -17,6 +17,9 @@ class FakeParams:
   def put(self, key, value):
     self.values[key] = value.encode("utf-8")
 
+  def remove(self, key):
+    self.values.pop(key, None)
+
 
 class FakeStatusProvider:
   def status(self):
@@ -62,6 +65,26 @@ class TestMobileAPI(unittest.TestCase):
     self.assertEqual(status, 200)
     self.assertEqual(body["values"]["dp_alka"], "0")
     self.assertEqual(body["values"]["dp_lat_controller"], "2")
+    self.assertIn("states", body)
+
+  def test_dependent_setting_visibility(self):
+    self.request("/api/v1/params/dp_device_auto_shutdown", "PUT", {"value": "0"})
+    _, body = self.request("/api/v1/params")
+    self.assertFalse(body["states"]["dp_device_auto_shutdown_in"]["visible"])
+
+    self.request("/api/v1/params/dp_device_auto_shutdown", "PUT", {"value": "1"})
+    _, body = self.request("/api/v1/params")
+    self.assertTrue(body["states"]["dp_device_auto_shutdown_in"]["visible"])
+
+  def test_old_model_removes_incompatible_settings(self):
+    self.request("/api/v1/params/ExperimentalMode", "PUT", {"value": "1"})
+    self.request("/api/v1/params/ExperimentalLongitudinalEnabled", "PUT", {"value": "1"})
+    self.request("/api/v1/params/dp_0813", "PUT", {"value": "1"})
+    _, body = self.request("/api/v1/params")
+    self.assertNotIn("ExperimentalMode", body["values"])
+    self.assertNotIn("ExperimentalLongitudinalEnabled", body["values"])
+    self.assertFalse(body["states"]["ExperimentalMode"]["visible"])
+    self.request("/api/v1/params/dp_0813", "PUT", {"value": "0"})
 
   def test_put_param(self):
     status, body = self.request("/api/v1/params/dp_alka", "PUT", {"value": "1"})

@@ -22,6 +22,9 @@ class MemoryParams:
   def put(self, key: str, value: str) -> None:
     self.values[key] = value.encode("utf-8")
 
+  def remove(self, key: str) -> None:
+    self.values.pop(key, None)
+
 
 class MockStatusProvider:
   def status(self) -> Dict[str, Any]:

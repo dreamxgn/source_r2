@@ -32,9 +32,8 @@ struct APIClient {
     try await request(path: "api/v1/status")
   }
 
-  func fetchParameters() async throws -> [String: String] {
-    let response: ParameterValuesResponse = try await request(path: "api/v1/params")
-    return response.values
+  func fetchParameters() async throws -> ParameterValuesResponse {
+    try await request(path: "api/v1/params")
   }
 
   func updateParameter(key: String, value: String) async throws {

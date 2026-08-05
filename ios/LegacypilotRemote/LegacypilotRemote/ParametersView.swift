@@ -9,9 +9,10 @@ struct ParametersView: View {
   }
 
   private var filtered: [ParameterDefinition] {
-    guard !searchText.isEmpty else { return ParameterCatalog.definitions }
-    return ParameterCatalog.definitions.filter {
-      $0.title.localizedCaseInsensitiveContains(searchText) || $0.key.localizedCaseInsensitiveContains(searchText)
+    return ParameterCatalog.definitions.filter { definition in
+      guard store.parameterStates[definition.key]?.visible ?? true else { return false }
+      return searchText.isEmpty ||
+        definition.title.localizedCaseInsensitiveContains(searchText) || definition.key.localizedCaseInsensitiveContains(searchText)
     }
   }
 
@@ -41,7 +42,8 @@ private struct ParameterRow: View {
   private var value: String { store.parameters[definition.key] ?? "0" }
 
   var body: some View {
-    switch definition.kind {
+    Group {
+      switch definition.kind {
     case .toggle:
       Toggle(isOn: Binding(
         get: { value == "1" },
@@ -73,7 +75,10 @@ private struct ParameterRow: View {
       } label: {
         HStack { title; Spacer(); Text(value.isEmpty ? placeholder : value).lineLimit(1).foregroundStyle(.secondary) }
       }
+      }
     }
+    .disabled(!(store.parameterStates[definition.key]?.enabled ?? true))
+    .opacity((store.parameterStates[definition.key]?.enabled ?? true) ? 1 : 0.55)
   }
 
   private var title: some View {

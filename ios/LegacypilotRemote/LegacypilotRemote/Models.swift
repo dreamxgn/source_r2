@@ -52,6 +52,12 @@ struct DeviceStatus: Codable, Equatable {
 
 struct ParameterValuesResponse: Codable {
   let values: [String: String]
+  let states: [String: ParameterState]?
+}
+
+struct ParameterState: Codable {
+  let visible: Bool
+  let enabled: Bool
 }
 
 struct ParameterValue: Codable {

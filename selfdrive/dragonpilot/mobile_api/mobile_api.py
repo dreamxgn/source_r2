@@ -38,6 +38,27 @@ class StatusProvider:
     except Exception:
       return None
 
+  def parameter_context(self) -> Dict[str, Any]:
+    context: Dict[str, Any] = {
+      "hasCarParams": False,
+      "isReleaseBranch": self.params.get_bool("IsReleaseBranch"),
+    }
+    raw = self.params.get("CarParamsPersistent")
+    if raw is None:
+      return context
+    try:
+      cp = car.CarParams.from_bytes(raw)
+      experimental_available = bool(cp.experimentalLongitudinalAvailable)
+      experimental_enabled = self.params.get_bool("ExperimentalLongitudinalEnabled")
+      context.update({
+        "hasCarParams": True,
+        "experimentalLongitudinalAvailable": experimental_available,
+        "hasLongitudinalControl": experimental_enabled if experimental_available else bool(cp.openpilotLongitudinalControl),
+      })
+    except Exception:
+      pass
+    return context
+
   def status(self) -> Dict[str, Any]:
     # Drain pending messages without blocking the HTTP request.
     self.sm.update(0)

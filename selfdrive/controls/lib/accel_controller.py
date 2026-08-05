@@ -12,6 +12,8 @@ COAST_MIN_EXTRA_DISTANCE = 5.0
 COAST_MAX_REQUIRED_DECEL = -0.8
 COAST_COMFORT_BRAKE = 2.5
 COAST_STOP_DISTANCE = 6.0
+LEAD_PULLAWAY_MIN_SPEED_DELTA = 0.5
+LEAD_PULLAWAY_MIN_DISTANCE_MARGIN = 0.5
 
 
 def should_coast_for_lead(v_ego, lead, t_follow):
@@ -32,6 +34,14 @@ def should_coast_for_lead(v_ego, lead, t_follow):
   ttc = float(lead.dRel) / closing_speed
   required_decel = (v_lead ** 2 - v_ego ** 2) / (2.0 * extra_distance)
   return ttc > COAST_MIN_TTC and required_decel >= COAST_MAX_REQUIRED_DECEL
+
+
+def should_relax_accel_change_for_lead(v_ego, lead, t_follow):
+  """Allow a prompt acceleration recovery once a safely-spaced lead pulls away."""
+  minimum_distance = t_follow * max(float(v_ego), 0.0) + COAST_STOP_DISTANCE + LEAD_PULLAWAY_MIN_DISTANCE_MARGIN
+  return (lead is not None and lead.status and
+          float(lead.vLead) - float(v_ego) >= LEAD_PULLAWAY_MIN_SPEED_DELTA and
+          float(lead.dRel) >= minimum_distance)
 
 # accel profile by @arne182 modified by cgw
 _DP_CRUISE_MIN_V =       [-0.765, -0.765,  -0.80, -0.80, -0.75, -0.70]

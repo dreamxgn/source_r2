@@ -18,7 +18,7 @@ from openpilot.selfdrive.controls.lib.drive_helpers import V_CRUISE_MAX, CONTROL
 from openpilot.system.swaglog import cloudlog
 
 from openpilot.selfdrive.controls.lib.vision_turn_controller import VisionTurnController
-from openpilot.selfdrive.controls.lib.accel_controller import AccelController, should_coast_for_lead
+from openpilot.selfdrive.controls.lib.accel_controller import AccelController, should_coast_for_lead, should_relax_accel_change_for_lead
 from openpilot.selfdrive.controls.lib.dynamic_endtoend_controller import DynamicEndtoEndController
 
 LON_MPC_STEP = 0.2  # first step is 0.2s
@@ -166,7 +166,8 @@ class LongitudinalPlanner:
     if self.mpc.mode == 'acc' and should_coast_for_lead(v_ego, sm['radarState'].leadOne, get_T_FOLLOW(self.personality)):
       accel_limits_turns[1] = min(accel_limits_turns[1], max(0.0, self.a_desired - 0.05))
 
-    self.mpc.set_weights(prev_accel_constraint, personality=self.personality)
+    lead_pulling_away = should_relax_accel_change_for_lead(v_ego, sm['radarState'].leadOne, get_T_FOLLOW(self.personality))
+    self.mpc.set_weights(prev_accel_constraint and not lead_pulling_away, personality=self.personality)
     self.mpc.set_accel_limits(accel_limits_turns[0], accel_limits_turns[1])
     self.mpc.set_cur_state(self.v_desired_filter.x, self.a_desired)
     # Vision turn speed control is handled by VisionTurnController. Keeping the

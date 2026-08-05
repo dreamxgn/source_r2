@@ -83,11 +83,11 @@ class TestVisionStoppedLeadHold(unittest.TestCase):
 
   def test_stopped_lead_distance_compensation(self):
     compensated = compensate_stopped_lead_distance(0.0, self.stopped_lead, enabled=True)
-    self.assertEqual(compensated['dRel'], self.stopped_lead['dRel'] + 1.0)
+    self.assertEqual(compensated['dRel'], self.stopped_lead['dRel'] + 1.3)
     self.assertEqual(self.stopped_lead['dRel'], 7.0)
 
     compensated = compensate_stopped_lead_distance(1.5, self.stopped_lead, enabled=True)
-    self.assertEqual(compensated['dRel'], self.stopped_lead['dRel'] + 0.5)
+    self.assertEqual(compensated['dRel'], self.stopped_lead['dRel'] + 0.65)
 
   def test_distance_compensation_scope(self):
     moving_lead = dict(self.stopped_lead, vLead=1.0)

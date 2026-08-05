@@ -5,6 +5,34 @@ DP_ACCEL_ECO = 1
 DP_ACCEL_NORMAL = 2
 DP_ACCEL_SPORT = 3
 
+COAST_MIN_EGO_SPEED = 2.0
+COAST_MIN_CLOSING_SPEED = 0.3
+COAST_MIN_TTC = 5.0
+COAST_MIN_EXTRA_DISTANCE = 5.0
+COAST_MAX_REQUIRED_DECEL = -0.8
+COAST_COMFORT_BRAKE = 2.5
+COAST_STOP_DISTANCE = 6.0
+
+
+def should_coast_for_lead(v_ego, lead, t_follow):
+  if lead is None or not lead.status or v_ego < COAST_MIN_EGO_SPEED:
+    return False
+
+  v_lead = max(float(lead.vLead), 0.0)
+  closing_speed = max(float(v_ego) - v_lead, -float(lead.vRel), 0.0)
+  if closing_speed < COAST_MIN_CLOSING_SPEED:
+    return False
+
+  desired_distance = ((v_ego ** 2 - v_lead ** 2) / (2.0 * COAST_COMFORT_BRAKE) +
+                      t_follow * v_ego + COAST_STOP_DISTANCE)
+  extra_distance = float(lead.dRel) - desired_distance
+  if extra_distance < max(COAST_MIN_EXTRA_DISTANCE, 0.3 * v_ego):
+    return False
+
+  ttc = float(lead.dRel) / closing_speed
+  required_decel = (v_lead ** 2 - v_ego ** 2) / (2.0 * extra_distance)
+  return ttc > COAST_MIN_TTC and required_decel >= COAST_MAX_REQUIRED_DECEL
+
 # accel profile by @arne182 modified by cgw
 _DP_CRUISE_MIN_V =       [-0.765, -0.765,  -0.80, -0.80, -0.75, -0.70]
 _DP_CRUISE_MIN_V_ECO =   [-0.760, -0.760,  -0.76, -0.76, -0.70, -0.65]

@@ -11,13 +11,13 @@ from openpilot.common.realtime import DT_MDL
 from openpilot.selfdrive.legacy_modeld.constants import T_IDXS
 from openpilot.common.conversions import Conversions as CV
 from openpilot.selfdrive.controls.lib.longcontrol import LongCtrlState
-from openpilot.selfdrive.controls.lib.legacy_longitudinal_mpc_lib.long_mpc import LongitudinalMpc
+from openpilot.selfdrive.controls.lib.legacy_longitudinal_mpc_lib.long_mpc import LongitudinalMpc, get_T_FOLLOW
 from openpilot.selfdrive.controls.lib.legacy_longitudinal_mpc_lib.long_mpc import T_IDXS as T_IDXS_MPC
 from openpilot.selfdrive.controls.lib.drive_helpers import V_CRUISE_MAX, CONTROL_N
 from openpilot.system.swaglog import cloudlog
 from openpilot.selfdrive.controls.lib.legacy_longitudinal_mpc_lib.long_mpc import STOP_DISTANCE
 from openpilot.selfdrive.controls.lib.vision_turn_controller import VisionTurnController
-from openpilot.selfdrive.controls.lib.accel_controller import AccelController
+from openpilot.selfdrive.controls.lib.accel_controller import AccelController, should_coast_for_lead
 
 LON_MPC_STEP = 0.2  # first step is 0.2s
 AWARENESS_DECEL = -0.2  # car smoothly decel at .2m/s^2 when user is distracted
@@ -130,6 +130,8 @@ class LongitudinalPlanner:
     # clip limits, cannot init MPC outside of bounds
     accel_limits_turns[0] = min(accel_limits_turns[0], self.a_desired + 0.05, a_min_sol)
     accel_limits_turns[1] = max(accel_limits_turns[1], self.a_desired - 0.05)
+    if should_coast_for_lead(v_ego, sm['radarState'].leadOne, get_T_FOLLOW(self.personality)):
+      accel_limits_turns[1] = min(accel_limits_turns[1], max(0.0, self.a_desired - 0.05))
 
     self.mpc.set_weights(prev_accel_constraint, personality=self.personality)
     self.mpc.set_accel_limits(accel_limits_turns[0], accel_limits_turns[1])

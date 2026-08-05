@@ -19,6 +19,7 @@ struct OverviewView: View {
             .padding()
             .background((message.severity > 0 ? Color.red : Color.blue).opacity(0.14), in: RoundedRectangle(cornerRadius: 16))
         }
+        speedCard
         metricsGrid
         drivingControlsCard
         temperatureCard
@@ -65,6 +66,28 @@ struct OverviewView: View {
       MetricCard(title: "存储", value: formatted(store.status.storagePercent, suffix: "%"), icon: "internaldrive")
       MetricCard(title: "热状态", value: store.status.thermalStatus, icon: "flame")
     }
+  }
+
+  private var speedCard: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      Label("行驶速度", systemImage: "speedometer").font(.headline)
+      HStack(alignment: .firstTextBaseline) {
+        VStack(alignment: .leading, spacing: 2) {
+          Text("当前车速").font(.caption).foregroundStyle(.secondary)
+          Text(speedText(store.status.speedKph)).font(.system(size: 38, weight: .bold, design: .rounded))
+        }
+        Spacer()
+        VStack(alignment: .trailing, spacing: 2) {
+          Text("OP 限定车速").font(.caption).foregroundStyle(.secondary)
+          Text(speedText(store.status.setSpeedKph)).font(.title2.bold())
+        }
+      }
+    }
+    .padding().background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
+  }
+
+  private func speedText(_ speed: Double?) -> String {
+    speed.map { String(format: "%.0f km/h", $0) } ?? "— km/h"
   }
 
   private var informationCard: some View {

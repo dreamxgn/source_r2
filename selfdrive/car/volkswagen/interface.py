@@ -98,7 +98,9 @@ class CarInterface(CarInterfaceBase):
     ret.stoppingControl = True
     ret.stopAccel = -0.55
     ret.vEgoStarting = 0.1
-    ret.vEgoStopping = 0.5
+    # Delay the final stopping state so vision-only longitudinal can close more of
+    # the planned gap before brake hold takes over.
+    ret.vEgoStopping = 0.3
     ret.longitudinalTuning.kpV = [0.1]
     ret.longitudinalTuning.kiV = [0.0]
 

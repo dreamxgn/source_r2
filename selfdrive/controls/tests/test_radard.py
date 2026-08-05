@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import unittest
 
-from openpilot.selfdrive.controls.lib.vision_lead_estimator import VisionLeadEstimator
+from openpilot.selfdrive.controls.lib.vision_lead_estimator import STOPPED_LEAD_RELEASE_FRAMES, VisionLeadEstimator, VisionStoppedLeadHold
 
 
 class TestVisionLeadEstimator(unittest.TestCase):
@@ -44,6 +44,42 @@ class TestVisionLeadEstimator(unittest.TestCase):
     self.estimator.update(29.9, -4.0, 16.0)
     self.estimator.reset()
     self.assertEqual(self.estimator.update(29.8, -2.0, 18.0), 0.0)
+
+
+class TestVisionStoppedLeadHold(unittest.TestCase):
+  def setUp(self):
+    self.hold = VisionStoppedLeadHold(0.05)
+    self.stopped_lead = {'status': True, 'dRel': 7.0, 'yRel': 0.0, 'vRel': 0.0,
+                         'vLead': 0.0, 'vLeadK': 0.0, 'aLeadK': 0.0}
+    self.no_lead = {'status': False}
+
+  def test_holds_stopped_lead_when_vision_drops(self):
+    self.hold.update(0.0, self.stopped_lead, self.no_lead)
+    lead_one, _ = self.hold.update(0.0, self.no_lead, self.no_lead)
+    self.assertTrue(lead_one['status'])
+    self.assertEqual(lead_one['vLead'], 0.0)
+
+  def test_adjacent_moving_lead_does_not_release(self):
+    adjacent_lead = dict(self.stopped_lead, yRel=3.2, vLead=4.0, vLeadK=4.0)
+    self.hold.update(0.0, self.stopped_lead, self.no_lead)
+    for _ in range(STOPPED_LEAD_RELEASE_FRAMES + 1):
+      lead_one, _ = self.hold.update(0.0, self.no_lead, adjacent_lead)
+    self.assertTrue(lead_one['status'])
+    self.assertEqual(lead_one['vLead'], 0.0)
+
+  def test_same_lead_must_move_consistently_to_release(self):
+    moving_lead = dict(self.stopped_lead, dRel=7.2, vLead=1.0, vLeadK=1.0)
+    self.hold.update(0.0, self.stopped_lead, self.no_lead)
+    for _ in range(STOPPED_LEAD_RELEASE_FRAMES - 1):
+      lead_one, _ = self.hold.update(0.0, moving_lead, self.no_lead)
+      self.assertEqual(lead_one['vLead'], 0.0)
+    lead_one, _ = self.hold.update(0.0, moving_lead, self.no_lead)
+    self.assertEqual(lead_one['vLead'], 1.0)
+
+  def test_driver_movement_resets_hold(self):
+    self.hold.update(0.0, self.stopped_lead, self.no_lead)
+    lead_one, _ = self.hold.update(1.1, self.no_lead, self.no_lead)
+    self.assertFalse(lead_one['status'])
 
 
 if __name__ == "__main__":

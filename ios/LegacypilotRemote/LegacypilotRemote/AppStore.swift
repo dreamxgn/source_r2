@@ -40,7 +40,7 @@ final class AppStore: ObservableObject {
     pollingTask = Task { [weak self] in
       while !Task.isCancelled {
         await self?.refreshStatus(showSpinner: false)
-        try? await Task.sleep(nanoseconds: 2_000_000_000)
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
       }
     }
   }

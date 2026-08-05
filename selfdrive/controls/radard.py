@@ -11,7 +11,7 @@ from openpilot.common.params import Params
 from openpilot.common.realtime import Ratekeeper, Priority, config_realtime_process
 from openpilot.system.swaglog import cloudlog
 from openpilot.system.hardware import TICI
-from openpilot.selfdrive.controls.lib.vision_lead_estimator import VISION_ACCEL_TAU, VisionLeadEstimator
+from openpilot.selfdrive.controls.lib.vision_lead_estimator import VISION_ACCEL_TAU, VISION_STOPPED_SPEED, VisionLeadEstimator, VisionStoppedLeadHold
 
 from openpilot.common.kalman.simple_kalman import KF1D
 
@@ -155,7 +155,11 @@ def get_RadarState_from_vision(lead_msg: capnp._DynamicStructReader, v_ego: floa
   lead_v_rel_pred = lead_msg.v[0] - model_v_ego
   d_rel = float(lead_msg.x[0] - RADAR_TO_CAMERA)
   v_lead = float(v_ego + lead_v_rel_pred)
-  a_lead = vision_estimator.update(d_rel, lead_v_rel_pred, v_lead) if vision_estimator is not None else 0.0
+  if vision_estimator is not None and abs(v_lead) < VISION_STOPPED_SPEED:
+    vision_estimator.reset()
+    a_lead = 0.0
+  else:
+    a_lead = vision_estimator.update(d_rel, lead_v_rel_pred, v_lead) if vision_estimator is not None else 0.0
   return {
     "dRel": d_rel,
     "yRel": float(-lead_msg.y[0]),
@@ -204,7 +208,7 @@ def get_lead(v_ego: float, ready: bool, tracks: Dict[int, Track], lead_msg: capn
 
 
 class RadarD:
-  def __init__(self, radar_ts: float, delay: int = 0):
+  def __init__(self, radar_ts: float, delay: int = 0, vision_stopped_lead_hold: bool = False):
     self.current_time = 0.0
 
     self.tracks: Dict[int, Track] = {}
@@ -218,6 +222,8 @@ class RadarD:
 
     self.ready = False
     self.vision_lead_estimators = [VisionLeadEstimator(radar_ts), VisionLeadEstimator(radar_ts)]
+    self.vision_stopped_lead_hold_enabled = vision_stopped_lead_hold
+    self.vision_stopped_lead_hold = VisionStoppedLeadHold(radar_ts)
 
   def update(self, sm: messaging.SubMaster, rr: Optional[car.RadarData]):
     self.current_time = 1e-9*max(sm.logMonoTime.values())
@@ -268,10 +274,14 @@ class RadarD:
       model_v_ego = self.v_ego
     leads_v3 = sm['modelV2'].leadsV3
     if len(leads_v3) > 1:
-      self.radar_state.leadOne = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[0], model_v_ego, low_speed_override=True,
-                                          vision_estimator=self.vision_lead_estimators[0])
-      self.radar_state.leadTwo = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[1], model_v_ego, low_speed_override=False,
-                                          vision_estimator=self.vision_lead_estimators[1])
+      lead_one = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[0], model_v_ego, low_speed_override=True,
+                          vision_estimator=self.vision_lead_estimators[0])
+      lead_two = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[1], model_v_ego, low_speed_override=False,
+                          vision_estimator=self.vision_lead_estimators[1])
+      if self.vision_stopped_lead_hold_enabled:
+        lead_one, lead_two = self.vision_stopped_lead_hold.update(self.v_ego, lead_one, lead_two)
+      self.radar_state.leadOne = lead_one
+      self.radar_state.leadTwo = lead_two
 
   def publish(self, pm: messaging.PubMaster, lag_ms: float):
     assert self.radar_state is not None
@@ -321,7 +331,7 @@ def radard_thread(sm: Optional[messaging.SubMaster] = None, pm: Optional[messagi
   RI = RadarInterface(CP)
 
   rk = Ratekeeper(1.0 / CP.radarTimeStep, print_delay_threshold=None)
-  RD = RadarD(CP.radarTimeStep, RI.delay)
+  RD = RadarD(CP.radarTimeStep, RI.delay, vision_stopped_lead_hold=CP.carName == "volkswagen" and CP.radarUnavailable)
 
   while 1:
     can_strings = messaging.drain_sock_raw(can_sock, wait_for_one=True)

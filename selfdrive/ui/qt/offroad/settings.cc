@@ -222,13 +222,16 @@ void TogglesPanel::updateToggles() {
 
   const bool is_release = params.getBool("IsReleaseBranch");
   const bool is_old_model = params.getBool("dp_0813");
+  const bool experimental_long_enabled = params.getBool("ExperimentalLongitudinalEnabled");
+  auto old_model_toggle = toggles["dp_0813"];
+  old_model_toggle->setEnabled((is_old_model || !experimental_long_enabled) && !params.getBool("dp_0813Lock"));
   auto cp_bytes = params.get("CarParamsPersistent");
   if (is_old_model) {
-    // rick - we should hide and remove experimental long related toggles
+    // Hide incompatible controls, but preserve the longitudinal preference so
+    // switching back to the newer model is not a destructive operation.
     experimental_mode_toggle->setVisible(false);
     op_long_toggle->setVisible(false);
     params.remove("ExperimentalMode");
-    params.remove("ExperimentalLongitudinalEnabled");
   } else if (!cp_bytes.empty()) {
     AlignedBuffer aligned_buf;
     capnp::FlatArrayMessageReader cmsg(aligned_buf.align(cp_bytes.data(), cp_bytes.size()));

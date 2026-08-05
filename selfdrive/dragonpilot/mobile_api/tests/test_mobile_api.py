@@ -25,6 +25,14 @@ class FakeStatusProvider:
   def status(self):
     return {"deviceName": "test device", "online": True}
 
+  def parameter_context(self):
+    return {
+      "hasCarParams": True,
+      "experimentalLongitudinalAvailable": True,
+      "hasLongitudinalControl": True,
+      "isReleaseBranch": False,
+    }
+
 
 class TestMobileAPI(unittest.TestCase):
   @classmethod
@@ -76,15 +84,32 @@ class TestMobileAPI(unittest.TestCase):
     _, body = self.request("/api/v1/params")
     self.assertTrue(body["states"]["dp_device_auto_shutdown_in"]["visible"])
 
-  def test_old_model_removes_incompatible_settings(self):
+  def test_old_model_rejected_while_openpilot_longitudinal_enabled(self):
     self.request("/api/v1/params/ExperimentalMode", "PUT", {"value": "1"})
     self.request("/api/v1/params/ExperimentalLongitudinalEnabled", "PUT", {"value": "1"})
+    with self.assertRaises(HTTPError) as context:
+      self.request("/api/v1/params/dp_0813", "PUT", {"value": "1"})
+    self.assertEqual(context.exception.code, 400)
+    context.exception.close()
+    _, body = self.request("/api/v1/params")
+    self.assertEqual(body["values"]["ExperimentalLongitudinalEnabled"], "1")
+    self.assertFalse(body["states"]["dp_0813"]["enabled"])
+
+    self.request("/api/v1/params/ExperimentalLongitudinalEnabled", "PUT", {"value": "0"})
     self.request("/api/v1/params/dp_0813", "PUT", {"value": "1"})
     _, body = self.request("/api/v1/params")
     self.assertNotIn("ExperimentalMode", body["values"])
-    self.assertNotIn("ExperimentalLongitudinalEnabled", body["values"])
+    self.assertEqual(body["values"]["ExperimentalLongitudinalEnabled"], "0")
     self.assertFalse(body["states"]["ExperimentalMode"]["visible"])
+
+    # A device left in the inconsistent state by an older version must still
+    # allow the legacy model to be turned off.
+    self.params.put("ExperimentalLongitudinalEnabled", "1")
+    _, body = self.request("/api/v1/params")
+    self.assertTrue(body["states"]["dp_0813"]["enabled"])
     self.request("/api/v1/params/dp_0813", "PUT", {"value": "0"})
+    _, body = self.request("/api/v1/params")
+    self.assertTrue(body["states"]["ExperimentalLongitudinalEnabled"]["visible"])
 
   def test_put_param(self):
     status, body = self.request("/api/v1/params/dp_alka", "PUT", {"value": "1"})

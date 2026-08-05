@@ -90,7 +90,7 @@ struct ParameterDefinition: Identifiable {
 enum ParameterCatalog {
   static let definitions: [ParameterDefinition] = [
     .init(key: "OpenpilotEnabledToggle", title: "启用 openpilot", detail: "使用 openpilot 自适应巡航和车道保持功能。", category: "openpilot", kind: .toggle, requiresReboot: false),
-    .init(key: "dp_0813", title: "使用 0.8.13.1 驾驶模型", detail: "切换到旧版驾驶模型。", category: "openpilot", kind: .toggle, requiresReboot: true),
+    .init(key: "dp_0813", title: "使用 0.8.13.1 驾驶模型", detail: "切换到旧版驾驶模型。旧模型不支持实验性 openpilot 纵向控制；需先关闭 openpilot 纵向控制。", category: "openpilot", kind: .toggle, requiresReboot: true),
     .init(key: "dp_logging", title: "启用行车记录", detail: "记录车辆状态和摄像头数据。", category: "openpilot", kind: .toggle, requiresReboot: true),
     .init(key: "ExperimentalLongitudinalEnabled", title: "openpilot 纵向控制", detail: "使用实验性 openpilot 纵向控制。", category: "openpilot", kind: .toggle, requiresReboot: false),
     .init(key: "ExperimentalMode", title: "实验模式", detail: "启用实验性驾驶功能。", category: "openpilot", kind: .toggle, requiresReboot: false),

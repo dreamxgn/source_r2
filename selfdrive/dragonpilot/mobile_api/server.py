@@ -69,6 +69,12 @@ class MobileAPI:
     if key in ("ExperimentalMode", "LongitudinalPersonality") and context.get("hasCarParams") and not old_model:
       enabled = enabled and bool(context.get("hasLongitudinalControl"))
 
+    # Switching to the legacy model disables experimental longitudinal at the
+    # next controls startup. Do not allow a remote model change to silently
+    # replace an active openpilot longitudinal configuration with stock ACC.
+    if key == "dp_0813" and not old_model and values.get("ExperimentalLongitudinalEnabled") == "1":
+      enabled = False
+
     if key == "dp_device_auto_shutdown_in":
       visible = values.get("dp_device_auto_shutdown") == "1"
     elif key == "dp_lat_lane_priority_mode_speed_based":
@@ -87,13 +93,16 @@ class MobileAPI:
       raise KeyError(key)
     if not isinstance(value, str) or len(value) > 128:
       raise ValueError("value must be a string of at most 128 characters")
+    if key == "dp_0813" and value == "1" and self._get_bool("ExperimentalLongitudinalEnabled"):
+      raise ValueError("disable openpilot longitudinal control before selecting the 0.8.13 model")
     self.params.put(key, value)
     if key == "dp_0813" and value == "1":
-      for incompatible_key in ("ExperimentalMode", "ExperimentalLongitudinalEnabled"):
-        try:
-          self.params.remove(incompatible_key)
-        except (AttributeError, KeyError):
-          pass
+      # Experimental mode is unavailable with the legacy model. Preserve the
+      # longitudinal preference so a later switch back is not destructive.
+      try:
+        self.params.remove("ExperimentalMode")
+      except (AttributeError, KeyError):
+        pass
     return {"value": value}
 
   def reset_calibration(self) -> Dict[str, bool]:

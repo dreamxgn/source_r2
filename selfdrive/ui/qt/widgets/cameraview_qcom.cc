@@ -240,13 +240,6 @@ void CameraWidget::paintGL() {
   //   if (frames[frame_idx].first == draw_frame_id) break;
   // }
 
-  // Log duplicate/dropped frames
-  if (frames[frame_idx].first == prev_frame_id) {
-    qDebug() << "Drawing same frame twice" << frames[frame_idx].first;
-  } else if (frames[frame_idx].first != prev_frame_id + 1) {
-    qDebug() << "Skipped frame" << frames[frame_idx].first;
-  }
-  prev_frame_id = frames[frame_idx].first;
   VisionBuf *frame = frames[frame_idx].second;
   assert(frame != nullptr);
 

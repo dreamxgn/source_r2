@@ -70,7 +70,6 @@ protected:
   std::recursive_mutex frame_lock;
   std::deque<std::pair<uint32_t, VisionBuf*>> frames;
   uint32_t draw_frame_id = 0;
-  uint32_t prev_frame_id = 0;
 
 protected slots:
   void vipcConnected(VisionIpcClient *vipc_client);

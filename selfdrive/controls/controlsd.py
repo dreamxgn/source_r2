@@ -965,8 +965,11 @@ class Controls:
     start_time = time.monotonic()
     self.prof.checkpoint("Ratekeeper", ignore=True)
 
-    self.is_metric = self.params.get_bool("IsMetric")
-    self.experimental_mode = self.params.get_bool("ExperimentalMode") and self.CP.openpilotLongitudinalControl
+    # These settings do not need to be read from disk on every 100 Hz control cycle.
+    # Refresh them once a second so changes made while driving still take effect.
+    if self.sm.frame % int(1. / DT_CTRL) == 0:
+      self.is_metric = self.params.get_bool("IsMetric")
+      self.experimental_mode = self.params.get_bool("ExperimentalMode") and self.CP.openpilotLongitudinalControl
     # rick - we should disable experimental mode on radarless car w/ 0.8.13 model
     if self.CP.radarUnavailable and self.dp_0813:
       self.experimental_mode = False

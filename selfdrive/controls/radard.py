@@ -11,7 +11,7 @@ from openpilot.common.params import Params
 from openpilot.common.realtime import Ratekeeper, Priority, config_realtime_process
 from openpilot.system.swaglog import cloudlog
 from openpilot.system.hardware import TICI
-from openpilot.selfdrive.controls.lib.vision_lead_estimator import VISION_ACCEL_TAU, VISION_STOPPED_SPEED, VisionLeadEstimator, VisionStoppedLeadHold
+from openpilot.selfdrive.controls.lib.vision_lead_estimator import VISION_ACCEL_TAU, VISION_STOPPED_SPEED, VisionLeadEstimator, VisionStoppedLeadHold, compensate_stopped_lead_distance
 
 from openpilot.common.kalman.simple_kalman import KF1D
 
@@ -280,6 +280,7 @@ class RadarD:
                           vision_estimator=self.vision_lead_estimators[1])
       if self.vision_stopped_lead_hold_enabled:
         lead_one, lead_two = self.vision_stopped_lead_hold.update(self.v_ego, lead_one, lead_two)
+      lead_one = compensate_stopped_lead_distance(self.v_ego, lead_one, self.vision_stopped_lead_hold_enabled)
       self.radar_state.leadOne = lead_one
       self.radar_state.leadTwo = lead_two
 

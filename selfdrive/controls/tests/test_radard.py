@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import unittest
 
-from openpilot.selfdrive.controls.lib.vision_lead_estimator import STOPPED_LEAD_RELEASE_FRAMES, VisionLeadEstimator, VisionStoppedLeadHold
+from openpilot.selfdrive.controls.lib.vision_lead_estimator import STOPPED_LEAD_RELEASE_FRAMES, VisionLeadEstimator, VisionStoppedLeadHold, compensate_stopped_lead_distance
 
 
 class TestVisionLeadEstimator(unittest.TestCase):
@@ -80,6 +80,20 @@ class TestVisionStoppedLeadHold(unittest.TestCase):
     self.hold.update(0.0, self.stopped_lead, self.no_lead)
     lead_one, _ = self.hold.update(1.1, self.no_lead, self.no_lead)
     self.assertFalse(lead_one['status'])
+
+  def test_stopped_lead_distance_compensation(self):
+    compensated = compensate_stopped_lead_distance(0.0, self.stopped_lead, enabled=True)
+    self.assertEqual(compensated['dRel'], self.stopped_lead['dRel'] + 1.0)
+    self.assertEqual(self.stopped_lead['dRel'], 7.0)
+
+    compensated = compensate_stopped_lead_distance(1.5, self.stopped_lead, enabled=True)
+    self.assertEqual(compensated['dRel'], self.stopped_lead['dRel'] + 0.5)
+
+  def test_distance_compensation_scope(self):
+    moving_lead = dict(self.stopped_lead, vLead=1.0)
+    self.assertIs(compensate_stopped_lead_distance(0.0, moving_lead, enabled=True), moving_lead)
+    self.assertIs(compensate_stopped_lead_distance(3.0, self.stopped_lead, enabled=True), self.stopped_lead)
+    self.assertIs(compensate_stopped_lead_distance(0.0, self.stopped_lead, enabled=False), self.stopped_lead)
 
 
 if __name__ == "__main__":

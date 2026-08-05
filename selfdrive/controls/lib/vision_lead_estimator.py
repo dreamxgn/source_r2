@@ -8,7 +8,9 @@ VISION_ACCEL_ATTACK = 0.35
 VISION_ACCEL_RELEASE = 0.08
 VISION_LEAD_DIST_JUMP_MIN = 3.0
 VISION_LEAD_VEL_JUMP = 7.0
-VISION_STOPPED_SPEED = 0.3
+VISION_STOPPED_SPEED = 0.5
+VISION_STOPPED_DISTANCE_COMPENSATION = 1.0
+VISION_STOPPED_DISTANCE_COMPENSATION_MAX_EGO_SPEED = 3.0
 
 STOPPED_LEAD_EGO_SPEED = 0.5
 STOPPED_LEAD_RESET_EGO_SPEED = 1.0
@@ -17,6 +19,19 @@ STOPPED_LEAD_MATCH_DISTANCE = 3.0
 STOPPED_LEAD_MATCH_LATERAL = 1.5
 STOPPED_LEAD_MOVING_SPEED = 0.5
 STOPPED_LEAD_RELEASE_FRAMES = 5
+
+
+def compensate_stopped_lead_distance(v_ego: float, lead, enabled: bool):
+  if (not enabled or not lead.get('status', False) or
+      abs(lead['vLead']) >= VISION_STOPPED_SPEED or
+      not 0.0 < lead['dRel'] < STOPPED_LEAD_MAX_DISTANCE or
+      v_ego >= VISION_STOPPED_DISTANCE_COMPENSATION_MAX_EGO_SPEED):
+    return lead
+
+  compensated_lead = dict(lead)
+  speed_factor = 1.0 - max(v_ego, 0.0) / VISION_STOPPED_DISTANCE_COMPENSATION_MAX_EGO_SPEED
+  compensated_lead['dRel'] += VISION_STOPPED_DISTANCE_COMPENSATION * speed_factor
+  return compensated_lead
 
 
 class VisionLeadEstimator:

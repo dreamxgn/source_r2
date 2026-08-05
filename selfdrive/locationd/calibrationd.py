@@ -32,23 +32,37 @@ BLOCK_SIZE = 100
 INPUTS_NEEDED = 5   # Minimum blocks needed for valid calibration
 INPUTS_WANTED = 50   # We want a little bit more than we need for stability
 MAX_ALLOWED_SPREAD = np.radians(2)
-MOUNTING_OFFSET_PITCH_THRESHOLD = np.radians(1.5)
-MOUNTING_OFFSET_YAW_THRESHOLD = np.radians(0.8)
-MOUNTING_OFFSET_PITCH_CLEAR = np.radians(1.0)
-MOUNTING_OFFSET_YAW_CLEAR = np.radians(0.5)
-MOUNTING_OFFSET_MIN_SAMPLES = 20
+MOUNTING_OFFSET_THRESHOLD = MAX_ALLOWED_SPREAD
+MOUNTING_OFFSET_CLEAR = np.radians(1.5)
+MOUNTING_OFFSET_MIN_SAMPLES = BLOCK_SIZE
 RPY_INIT = np.array([0.0,0.0,0.0])
 WIDE_FROM_DEVICE_EULER_INIT = np.array([0.0, 0.0, 0.0])
 HEIGHT_INIT = np.array([1.22])
 
-# These values are needed to accommodate the model frame in the narrow cam of the C3
-PITCH_LIMITS = np.array([-0.09074112085129739, 0.17])
+# C2 mounting limits: about 5 degrees up, 8 degrees down, and 4 degrees left/right.
+PITCH_LIMITS = np.array([-0.09074112085129739, 0.14907572052989657])
 YAW_LIMITS = np.array([-0.06912048084718224, 0.06912048084718235])
 DEBUG = os.getenv("DEBUG") is not None
 
 
 def is_calibration_valid(rpy: np.ndarray) -> bool:
   return (PITCH_LIMITS[0] < rpy[1] < PITCH_LIMITS[1]) and (YAW_LIMITS[0] < rpy[2] < YAW_LIMITS[1])  # type: ignore
+
+
+def get_calibration_adjustment(rpy: np.ndarray) -> str:
+  horizontal = ""
+  vertical = ""
+  if rpy[2] <= YAW_LIMITS[0]:
+    horizontal = "left"
+  elif rpy[2] >= YAW_LIMITS[1]:
+    horizontal = "right"
+
+  if rpy[1] <= PITCH_LIMITS[0]:
+    vertical = "down"
+  elif rpy[1] >= PITCH_LIMITS[1]:
+    vertical = "up"
+
+  return "_".join(direction for direction in (horizontal, vertical) if direction)
 
 
 def sanity_clip(rpy: np.ndarray) -> np.ndarray:
@@ -91,12 +105,10 @@ class Calibrator:
     self.update_status()
     self.startup_mount_check_active = bool(param_put and calibration_params and
                                            valid_blocks >= INPUTS_NEEDED and is_calibration_valid(rpy_init))
-    self.startup_recalibration_pending = False
     self.startup_voice_event = "initial_calibrating" if param_put and valid_blocks < INPUTS_NEEDED else None
 
   def reset_calibration(self) -> None:
     self.startup_mount_check_active = False
-    self.startup_recalibration_pending = False
     self.cal_status = log.LiveCalibrationData.Status.uncalibrated
     self.reset()
     self.update_status()
@@ -175,8 +187,9 @@ class Calibrator:
     # Make the transition smooth. Abrupt transitions are not good for feedback loop through supercombo model.
     # TODO: add height spread check with smooth transition too
     if max(self.calib_spread) > MAX_ALLOWED_SPREAD and self.cal_status == log.LiveCalibrationData.Status.calibrated:
-      self.reset(self.rpys[self.block_idx - 1], valid_blocks=1, smooth_from=self.rpy)
-      self.cal_status = log.LiveCalibrationData.Status.recalibrating
+      self.reset(self.rpys[self.block_idx - 1], valid_blocks=INPUTS_NEEDED, smooth_from=self.rpy)
+      self.update_status()
+      self.mounting_offset_detected = True
 
     write_this_cycle = (self.idx == 0) and (self.block_idx % (INPUTS_WANTED//5) == 5)
     if self.param_put and write_this_cycle:
@@ -233,32 +246,32 @@ class Calibrator:
                                                                                 new_wide_from_device_euler, self.idx, float(BLOCK_SIZE))
     self.heights[self.block_idx] = moving_avg_with_linear_decay(self.heights[self.block_idx], new_height, self.idx, float(BLOCK_SIZE))
 
-    # Detect a sustained change from the accepted calibration. During startup
-    # this decides whether the cached calibration can be trusted; afterward it
-    # only drives the informational mounting-offset voice reminder.
+    # Compare a complete block against the accepted calibration. Match the
+    # upstream C2 calibration spread threshold and do not gate engagement for
+    # an in-range mounting change; calibration continuously follows the mount.
     samples_in_block = self.idx + 1
     if self.cal_status == log.LiveCalibrationData.Status.calibrated and samples_in_block >= MOUNTING_OFFSET_MIN_SAMPLES:
       delta = np.abs(self.rpys[self.block_idx] - self.rpy)
       if not self.mounting_offset_detected:
-        self.mounting_offset_detected = (delta[1] > MOUNTING_OFFSET_PITCH_THRESHOLD or
-                                         delta[2] > MOUNTING_OFFSET_YAW_THRESHOLD)
-      elif delta[1] < MOUNTING_OFFSET_PITCH_CLEAR and delta[2] < MOUNTING_OFFSET_YAW_CLEAR:
+        self.mounting_offset_detected = (delta[1] > MOUNTING_OFFSET_THRESHOLD or
+                                         delta[2] > MOUNTING_OFFSET_THRESHOLD)
+      elif delta[1] < MOUNTING_OFFSET_CLEAR and delta[2] < MOUNTING_OFFSET_CLEAR:
         self.mounting_offset_detected = False
 
       if self.startup_mount_check_active and self.mounting_offset_detected:
-        # A cached calibration exists, but the current mounting position no
-        # longer matches it. Seed recalibration from the recent observation.
+        # Seed continuous calibration from the complete recent block. Preserve
+        # the minimum valid block count so an in-range change does not disable
+        # controls; only an absolute out-of-range angle becomes invalid.
         old_rpy = self.rpy.copy()
         new_mount_rpy = self.rpys[self.block_idx].copy()
         new_mount_wide = self.wide_from_device_eulers[self.block_idx].copy()
         new_mount_height = self.heights[self.block_idx].copy()
-        self.reset(new_mount_rpy, valid_blocks=1,
+        self.reset(new_mount_rpy, valid_blocks=INPUTS_NEEDED,
                    wide_from_device_euler_init=new_mount_wide,
                    height_init=new_mount_height, smooth_from=old_rpy)
-        self.cal_status = log.LiveCalibrationData.Status.recalibrating
+        self.update_status()
         self.startup_mount_check_active = False
-        self.startup_recalibration_pending = True
-        self.startup_voice_event = "recalibrating"
+        self.startup_voice_event = "recalibrating" if self.cal_status == log.LiveCalibrationData.Status.calibrated else "failure"
         return new_rpy
       elif self.startup_mount_check_active:
         # The startup mounting check passed. The cached calibration can now be
@@ -290,13 +303,6 @@ class Calibrator:
     liveCalibration.wideFromDeviceEuler = self.wide_from_device_euler.tolist()
     liveCalibration.height = self.height.tolist()
 
-    # Gate engagement while verifying that the device still matches the saved
-    # mounting position. Keep the internal cached calibration intact so it can
-    # be used as the comparison baseline.
-    if self.startup_mount_check_active:
-      liveCalibration.calStatus = log.LiveCalibrationData.Status.uncalibrated
-      liveCalibration.calPerc = min(99., 100. * self.idx / MOUNTING_OFFSET_MIN_SAMPLES)
-
     if self.not_car:
       liveCalibration.validBlocks = INPUTS_NEEDED
       liveCalibration.calStatus = log.LiveCalibrationData.Status.calibrated
@@ -326,6 +332,11 @@ def calibrationd_thread(sm: Optional[messaging.SubMaster] = None, pm: Optional[m
   startup_mount_check_prev = calibrator.startup_mount_check_active
   params.put_bool("MountingOffsetDetected", mounting_offset_prev)
   params.put_bool("StartupMountingCheckActive", startup_mount_check_prev)
+  adjustment_direction_prev = get_calibration_adjustment(calibrator.rpy) if calibrator.cal_status == log.LiveCalibrationData.Status.invalid else ""
+  if adjustment_direction_prev:
+    params.put("CalibrationAdjustmentDirection", adjustment_direction_prev)
+  else:
+    params.remove("CalibrationAdjustmentDirection")
   params.remove("StartupCalibrationResult")
   if calibrator.startup_voice_event is not None:
     params.put("StartupCalibrationResult", calibrator.startup_voice_event)
@@ -358,17 +369,19 @@ def calibrationd_thread(sm: Optional[messaging.SubMaster] = None, pm: Optional[m
         mounting_offset_prev = calibrator.mounting_offset_detected
         params.put_bool("MountingOffsetDetected", mounting_offset_prev)
 
-      if calibrator.startup_recalibration_pending:
-        if calibrator.cal_status == log.LiveCalibrationData.Status.calibrated:
-          params.put("StartupCalibrationResult", "success")
-          calibrator.startup_recalibration_pending = False
-        elif calibrator.cal_status == log.LiveCalibrationData.Status.invalid:
-          params.put("StartupCalibrationResult", "failure")
-          calibrator.startup_recalibration_pending = False
-
       if calibrator.startup_voice_event is not None:
         params.put("StartupCalibrationResult", calibrator.startup_voice_event)
         calibrator.startup_voice_event = None
+
+      adjustment_direction = get_calibration_adjustment(calibrator.rpy) if calibrator.cal_status == log.LiveCalibrationData.Status.invalid else ""
+      if adjustment_direction != adjustment_direction_prev:
+        if adjustment_direction:
+          params.put("CalibrationAdjustmentDirection", adjustment_direction)
+        elif adjustment_direction_prev and calibrator.cal_status == log.LiveCalibrationData.Status.calibrated:
+          params.put("CalibrationAdjustmentDirection", "recovered")
+        else:
+          params.remove("CalibrationAdjustmentDirection")
+        adjustment_direction_prev = adjustment_direction
 
       if DEBUG and new_rpy is not None:
         print('got new rpy', new_rpy)

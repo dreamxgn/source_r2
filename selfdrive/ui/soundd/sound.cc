@@ -5,6 +5,7 @@
 #include <QAudio>
 #include <QAudioDeviceInfo>
 #include <QDebug>
+#include <QStringList>
 
 #include "cereal/messaging/messaging.h"
 #include "common/util.h"
@@ -38,6 +39,12 @@ Sound::Sound(QObject *parent) : sm({"controlsState", "microphone", "carState", "
   calibration_initial_voice = new QSoundEffect(this);
   calibration_initial_voice->setSource(QUrl::fromLocalFile("../../assets/sounds/calibration_initial_zh.wav"));
   temperature_warning_sound = new QSoundEffect(this);
+  const QStringList adjustment_directions = {"left", "right", "up", "down", "left_up", "left_down", "right_up", "right_down"};
+  for (const QString &direction : adjustment_directions) {
+    QSoundEffect *voice = new QSoundEffect(this);
+    voice->setSource(QUrl::fromLocalFile("../../assets/sounds/calibration_adjust_" + direction + "_zh.wav"));
+    calibration_adjustment_voices[direction] = voice;
+  }
 
   QTimer *timer = new QTimer(this);
   QObject::connect(timer, &QTimer::timeout, this, &Sound::update);
@@ -46,6 +53,7 @@ Sound::Sound(QObject *parent) : sm({"controlsState", "microphone", "carState", "
 
 void Sound::update() {
   sm.update(0);
+  setAlert(Alert::get(sm, 0));
 
   // Remind immediately on entering a warning band, then periodically while it
   // remains hot. Red and danger share the more urgent five-minute cadence.
@@ -98,6 +106,31 @@ void Sound::update() {
     Params().remove("StartupCalibrationResult");
   }
 
+  const QString adjustment_direction = QString::fromStdString(Params().get("CalibrationAdjustmentDirection"));
+  const bool adjustment_alert_active = current_alert.sound != AudibleAlert::NONE;
+  const uint64_t now = nanos_since_boot();
+  if (adjustment_direction == "recovered") {
+    if (!adjustment_alert_active) {
+      if (dp_device_audible_alert_mode != 2) {
+        calibration_success_voice->play();
+      }
+      Params().remove("CalibrationAdjustmentDirection");
+      calibration_adjustment_direction.clear();
+      last_calibration_adjustment_time = 0;
+    }
+  } else if (calibration_adjustment_voices.contains(adjustment_direction)) {
+    if (adjustment_direction != calibration_adjustment_direction) {
+      calibration_adjustment_direction = adjustment_direction;
+      last_calibration_adjustment_time = 0;
+    }
+    const uint64_t repeat_interval = 30ULL * 1000000000;
+    if (!adjustment_alert_active && dp_device_audible_alert_mode != 2 &&
+        (last_calibration_adjustment_time == 0 || now - last_calibration_adjustment_time >= repeat_interval)) {
+      calibration_adjustment_voices[adjustment_direction]->play();
+      last_calibration_adjustment_time = now;
+    }
+  }
+
   #ifdef QCOM2
   // scale volume using ambient noise level
   if (sm.updated("microphone")) {
@@ -123,9 +156,11 @@ void Sound::update() {
     calibration_recalibrating_voice->setVolume(std::round(100 * volume) / 100);
     calibration_initial_voice->setVolume(std::round(100 * volume) / 100);
     temperature_warning_sound->setVolume(std::round(100 * volume) / 100);
+    for (QSoundEffect *voice : calibration_adjustment_voices) {
+      voice->setVolume(std::round(100 * volume) / 100);
+    }
   }
   #endif
-  setAlert(Alert::get(sm, 0));
 }
 
 void Sound::setAlert(const Alert &alert) {

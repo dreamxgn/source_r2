@@ -42,6 +42,9 @@ protected:
   QSoundEffect *calibration_recalibrating_voice;
   QSoundEffect *calibration_initial_voice;
   QSoundEffect *temperature_warning_sound;
+  QMap<QString, QSoundEffect *> calibration_adjustment_voices;
+  QString calibration_adjustment_direction;
+  uint64_t last_calibration_adjustment_time = 0;
   bool mounting_offset_detected = false;
   int temperature_warning_level = 0;
   uint64_t last_temperature_warning_time = 0;

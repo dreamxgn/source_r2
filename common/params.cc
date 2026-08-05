@@ -92,6 +92,7 @@ std::unordered_map<std::string, uint32_t> keys = {
     {"AthenadPid", PERSISTENT},
     {"AthenadUploadQueue", PERSISTENT},
     {"CalibrationParams", PERSISTENT},
+    {"CalibrationAdjustmentDirection", CLEAR_ON_MANAGER_START},
     {"ResetCalibration", CLEAR_ON_MANAGER_START},
     {"MountingOffsetDetected", CLEAR_ON_MANAGER_START},
     {"StartupCalibrationResult", CLEAR_ON_MANAGER_START},

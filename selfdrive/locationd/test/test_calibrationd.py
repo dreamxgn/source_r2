@@ -8,10 +8,19 @@ import cereal.messaging as messaging
 from cereal import log
 from openpilot.common.params import Params
 from openpilot.selfdrive.locationd.calibrationd import Calibrator, INPUTS_NEEDED, INPUTS_WANTED, BLOCK_SIZE, MIN_SPEED_FILTER, \
-                                                         MAX_YAW_RATE_FILTER, SMOOTH_CYCLES, HEIGHT_INIT, MOUNTING_OFFSET_MIN_SAMPLES
+                                                         MAX_YAW_RATE_FILTER, SMOOTH_CYCLES, HEIGHT_INIT, MOUNTING_OFFSET_MIN_SAMPLES, \
+                                                         PITCH_LIMITS, YAW_LIMITS, get_calibration_adjustment
 
 
 class TestCalibrationd(unittest.TestCase):
+
+  def test_calibration_adjustment_direction(self):
+    self.assertEqual(get_calibration_adjustment(np.array([0., 0., YAW_LIMITS[0] - 0.01])), "left")
+    self.assertEqual(get_calibration_adjustment(np.array([0., 0., YAW_LIMITS[1] + 0.01])), "right")
+    self.assertEqual(get_calibration_adjustment(np.array([0., PITCH_LIMITS[0] - 0.01, 0.])), "down")
+    self.assertEqual(get_calibration_adjustment(np.array([0., PITCH_LIMITS[1] + 0.01, 0.])), "up")
+    self.assertEqual(get_calibration_adjustment(np.array([0., PITCH_LIMITS[1] + 0.01, YAW_LIMITS[0] - 0.01])), "left_up")
+    self.assertEqual(get_calibration_adjustment(np.zeros(3)), "")
 
   def test_read_saved_params(self):
     msg = messaging.new_message('liveCalibration')
@@ -63,14 +72,14 @@ class TestCalibrationd(unittest.TestCase):
 
     for _ in range(MOUNTING_OFFSET_MIN_SAMPLES):
       c.handle_v_ego(MIN_SPEED_FILTER + 1)
-      c.handle_cam_odom([MIN_SPEED_FILTER + 1, np.tan(np.radians(1.0)) * (MIN_SPEED_FILTER + 1), 0.0],
+      c.handle_cam_odom([MIN_SPEED_FILTER + 1, np.tan(np.radians(2.5)) * (MIN_SPEED_FILTER + 1), 0.0],
                         [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [1e-3, 1e-3, 1e-3],
                         [0.0, 0.0, HEIGHT_INIT.item()], [1e-3, 1e-3, 1e-3])
 
     self.assertTrue(c.mounting_offset_detected)
     self.assertEqual(c.cal_status, log.LiveCalibrationData.Status.calibrated)
 
-  def test_startup_mounting_offset_starts_recalibration(self):
+  def test_startup_mounting_offset_preserves_valid_calibration(self):
     c = Calibrator(param_put=False)
     c.valid_blocks = INPUTS_WANTED
     c.update_status()
@@ -78,24 +87,24 @@ class TestCalibrationd(unittest.TestCase):
 
     for _ in range(MOUNTING_OFFSET_MIN_SAMPLES):
       c.handle_v_ego(MIN_SPEED_FILTER + 1)
-      c.handle_cam_odom([MIN_SPEED_FILTER + 1, np.tan(np.radians(1.0)) * (MIN_SPEED_FILTER + 1), 0.0],
+      c.handle_cam_odom([MIN_SPEED_FILTER + 1, np.tan(np.radians(2.5)) * (MIN_SPEED_FILTER + 1), 0.0],
                         [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [1e-3, 1e-3, 1e-3],
                         [0.0, 0.0, HEIGHT_INIT.item()], [1e-3, 1e-3, 1e-3])
 
     self.assertFalse(c.startup_mount_check_active)
-    self.assertTrue(c.startup_recalibration_pending)
     self.assertEqual(c.startup_voice_event, "recalibrating")
-    self.assertEqual(c.cal_status, log.LiveCalibrationData.Status.recalibrating)
-    self.assertEqual(c.valid_blocks, 1)
+    self.assertEqual(c.cal_status, log.LiveCalibrationData.Status.calibrated)
+    self.assertEqual(c.valid_blocks, INPUTS_NEEDED)
+    self.assertEqual(c.get_msg().liveCalibration.calStatus, log.LiveCalibrationData.Status.calibrated)
 
-  def test_startup_mounting_check_gates_engagement_until_passed(self):
+  def test_startup_mounting_check_does_not_gate_engagement(self):
     c = Calibrator(param_put=False)
     c.valid_blocks = INPUTS_WANTED
     c.update_status()
     c.startup_mount_check_active = True
 
     self.assertEqual(c.cal_status, log.LiveCalibrationData.Status.calibrated)
-    self.assertEqual(c.get_msg().liveCalibration.calStatus, log.LiveCalibrationData.Status.uncalibrated)
+    self.assertEqual(c.get_msg().liveCalibration.calStatus, log.LiveCalibrationData.Status.calibrated)
 
     for _ in range(MOUNTING_OFFSET_MIN_SAMPLES):
       c.handle_v_ego(MIN_SPEED_FILTER + 1)
@@ -106,6 +115,23 @@ class TestCalibrationd(unittest.TestCase):
     self.assertFalse(c.startup_mount_check_active)
     self.assertEqual(c.startup_voice_event, "check_passed")
     self.assertEqual(c.get_msg().liveCalibration.calStatus, log.LiveCalibrationData.Status.calibrated)
+
+  def test_startup_mounting_offset_outside_absolute_limit_is_invalid(self):
+    c = Calibrator(param_put=False)
+    c.valid_blocks = INPUTS_WANTED
+    c.update_status()
+    c.startup_mount_check_active = True
+
+    yaw = YAW_LIMITS[1] + np.radians(0.2)
+    for _ in range(MOUNTING_OFFSET_MIN_SAMPLES):
+      c.handle_v_ego(MIN_SPEED_FILTER + 1)
+      c.handle_cam_odom([MIN_SPEED_FILTER + 1, np.tan(yaw) * (MIN_SPEED_FILTER + 1), 0.0],
+                        [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [1e-3, 1e-3, 1e-3],
+                        [0.0, 0.0, HEIGHT_INIT.item()], [1e-3, 1e-3, 1e-3])
+
+    self.assertFalse(c.startup_mount_check_active)
+    self.assertEqual(c.startup_voice_event, "failure")
+    self.assertEqual(c.cal_status, log.LiveCalibrationData.Status.invalid)
 
 
   def test_calibration_low_speed_reject(self):
@@ -197,8 +223,8 @@ class TestCalibrationd(unittest.TestCase):
                          [1e-3, 1e-3, 1e-3],
                          [0.0, 0.0, HEIGHT_INIT.item()],
                          [1e-3, 1e-3, 1e-3])
-    self.assertEqual(c.valid_blocks, 1)
-    self.assertEqual(c.cal_status, log.LiveCalibrationData.Status.recalibrating)
+    self.assertEqual(c.valid_blocks, INPUTS_NEEDED)
+    self.assertEqual(c.cal_status, log.LiveCalibrationData.Status.calibrated)
     np.testing.assert_allclose(c.rpy, [0.0, 0.0, -0.05], atol=1e-2)
 
 if __name__ == "__main__":

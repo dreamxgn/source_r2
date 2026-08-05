@@ -90,6 +90,8 @@ procs = [
 
   # mapd
   PythonProcess("mapd", "selfdrive.mapd.mapd"),
+  # local API for the Legacypilot Remote iOS app
+  PythonProcess("mobile_api", "selfdrive.dragonpilot.mobile_api.mobile_api", offroad=True),
   # gpxd
   # PythonProcess("gpxd", "selfdrive.dragonpilot.gpxd"),
   # PythonProcess("gpx_uploader", "selfdrive.dragonpilot.gpx_uploader", offroad=True),

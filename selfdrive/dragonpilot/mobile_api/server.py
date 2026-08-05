@@ -96,6 +96,15 @@ class MobileAPI:
           pass
     return {"value": value}
 
+  def reset_calibration(self) -> Dict[str, bool]:
+    for key in ("CalibrationParams", "LiveTorqueParameters"):
+      try:
+        self.params.remove(key)
+      except (AttributeError, KeyError):
+        pass
+    self.params.put("ResetCalibration", "1")
+    return {"ok": True}
+
 
 def make_handler(api: MobileAPI):
   class MobileAPIHandler(BaseHTTPRequestHandler):
@@ -129,6 +138,13 @@ def make_handler(api: MobileAPI):
         self._send_error(400, "invalid_request", str(exc))
       else:
         self._send_json(200, result)
+
+    def do_POST(self) -> None:
+      path = urlsplit(self.path).path.rstrip("/")
+      if path == "/api/v1/actions/reset-calibration":
+        self._send_json(200, api.reset_calibration())
+      else:
+        self._send_error(404, "not_found", "Endpoint not found")
 
     def _read_json(self) -> Any:
       try:

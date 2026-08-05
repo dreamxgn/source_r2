@@ -2,6 +2,7 @@ import SwiftUI
 
 struct OverviewView: View {
   @EnvironmentObject private var store: AppStore
+  @State private var confirmingCalibrationReset = false
 
   var body: some View {
     ScrollView {
@@ -19,6 +20,7 @@ struct OverviewView: View {
             .background((message.severity > 0 ? Color.red : Color.blue).opacity(0.14), in: RoundedRectangle(cornerRadius: 16))
         }
         metricsGrid
+        drivingControlsCard
         temperatureCard
         calibrationCard
         informationCard
@@ -27,6 +29,12 @@ struct OverviewView: View {
     }
     .navigationTitle("Legacypilot")
     .refreshable { await store.connect() }
+    .confirmationDialog("确定重置设备校准吗？", isPresented: $confirmingCalibrationReset, titleVisibility: .visible) {
+      Button("重置校准", role: .destructive) { Task { await store.resetCalibration() } }
+      Button("取消", role: .cancel) {}
+    } message: {
+      Text("设备需要重新行驶一段距离完成校准。")
+    }
   }
 
   private var connectionCard: some View {
@@ -72,6 +80,23 @@ struct OverviewView: View {
     .padding().background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
   }
 
+  private var drivingControlsCard: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Label("驾驶快捷调节", systemImage: "slider.horizontal.3").font(.headline)
+      HStack(spacing: 12) {
+        QuickControlButton(
+          title: "加速模式", value: accelerationProfile,
+          systemImage: "bolt.fill", enabled: canChange("dp_long_accel_profile")
+        ) { cycleParameter("dp_long_accel_profile", count: 4) }
+        QuickControlButton(
+          title: "驾驶个性", value: drivingPersonality,
+          systemImage: "car.fill", enabled: canChange("LongitudinalPersonality")
+        ) { cycleParameter("LongitudinalPersonality", count: 3) }
+      }
+    }
+    .padding().background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
+  }
+
   private var temperatureCard: some View {
     VStack(alignment: .leading, spacing: 12) {
       Label("实际温度", systemImage: "thermometer.medium").font(.headline)
@@ -99,6 +124,11 @@ struct OverviewView: View {
       InfoRow(label: "俯仰角", value: angle(store.status.calibrationPitchDeg, positive: "向下", negative: "向上"))
       Divider()
       InfoRow(label: "偏航角", value: angle(store.status.calibrationYawDeg, positive: "向左", negative: "向右"))
+      Button(role: .destructive) { confirmingCalibrationReset = true } label: {
+        Label("重置校准", systemImage: "arrow.counterclockwise")
+          .frame(maxWidth: .infinity)
+      }
+      .disabled(!store.status.online)
     }
     .padding().background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
   }
@@ -122,8 +152,54 @@ struct OverviewView: View {
     return String(format: "%.2f° %@", abs(value), value >= 0 ? positive : negative)
   }
 
+  private var accelerationProfile: String {
+    let labels = ["OP", "节能", "标准", "运动"]
+    return labels[safe: Int(store.parameters["dp_long_accel_profile"] ?? "0") ?? 0] ?? "OP"
+  }
+
+  private var drivingPersonality: String {
+    let labels = ["激进", "标准", "舒适"]
+    return labels[safe: Int(store.parameters["LongitudinalPersonality"] ?? "1") ?? 1] ?? "标准"
+  }
+
+  private func canChange(_ key: String) -> Bool {
+    store.status.online && (store.parameterStates[key]?.enabled ?? true)
+  }
+
+  private func cycleParameter(_ key: String, count: Int) {
+    let current = Int(store.parameters[key] ?? "0") ?? 0
+    Task { await store.setParameter(key, value: String((current + 1) % count)) }
+  }
+
   private func formatted(_ value: Double?, suffix: String) -> String {
     value.map { String(format: "%.0f%@", $0, suffix) } ?? "—"
+  }
+}
+
+private struct QuickControlButton: View {
+  let title: String
+  let value: String
+  let systemImage: String
+  let enabled: Bool
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      VStack(spacing: 8) {
+        Image(systemName: systemImage).font(.title2)
+        Text(title).font(.caption).foregroundStyle(.secondary)
+        Text(value).font(.headline)
+      }
+      .frame(maxWidth: .infinity).padding(.vertical, 12)
+      .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+    }
+    .buttonStyle(.plain).disabled(!enabled).opacity(enabled ? 1 : 0.5)
+  }
+}
+
+private extension Array {
+  subscript(safe index: Int) -> Element? {
+    indices.contains(index) ? self[index] : nil
   }
 }
 

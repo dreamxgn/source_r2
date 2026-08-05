@@ -64,6 +64,10 @@ struct ParameterValue: Codable {
   let value: String
 }
 
+struct ActionResponse: Codable {
+  let ok: Bool
+}
+
 enum ParameterKind {
   case toggle
   case choice([String])

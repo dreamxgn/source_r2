@@ -104,6 +104,16 @@ class TestMobileAPI(unittest.TestCase):
     self.assertEqual(context.exception.code, 400)
     context.exception.close()
 
+  def test_reset_calibration(self):
+    self.params.values["CalibrationParams"] = b"calibration"
+    self.params.values["LiveTorqueParameters"] = b"torque"
+    status, body = self.request("/api/v1/actions/reset-calibration", "POST")
+    self.assertEqual(status, 200)
+    self.assertEqual(body, {"ok": True})
+    self.assertNotIn("CalibrationParams", self.params.values)
+    self.assertNotIn("LiveTorqueParameters", self.params.values)
+    self.assertEqual(self.params.values["ResetCalibration"], b"1")
+
 
 if __name__ == "__main__":
   unittest.main()

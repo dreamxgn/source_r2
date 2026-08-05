@@ -124,6 +124,26 @@ final class AppStore: ObservableObject {
     }
   }
 
+  func resetCalibration() async {
+    if demoMode {
+      status.calibrationStatus = "uncalibrated"
+      status.calibrationProgress = 0
+      status.calibrationPitchDeg = nil
+      status.calibrationYawDeg = nil
+      return
+    }
+    do {
+      try await APIClient(address: deviceAddress).resetCalibration()
+      status.calibrationStatus = "uncalibrated"
+      status.calibrationProgress = 0
+      status.calibrationPitchDeg = nil
+      status.calibrationYawDeg = nil
+      errorMessage = nil
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+  }
+
   private static let demoParameters = Dictionary(
     uniqueKeysWithValues: ParameterCatalog.definitions.map { definition in
       let value: String

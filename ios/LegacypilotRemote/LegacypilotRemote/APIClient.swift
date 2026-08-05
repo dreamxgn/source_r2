@@ -43,6 +43,12 @@ struct APIClient {
     )
   }
 
+  func resetCalibration() async throws {
+    let _: ActionResponse = try await request(
+      path: "api/v1/actions/reset-calibration", method: "POST", body: Optional<String>.none
+    )
+  }
+
   private func request<Response: Decodable, Body: Encodable>(
     path: String, method: String = "GET", body: Body?
   ) async throws -> Response {

@@ -65,6 +65,8 @@ failed user-initiated connection.
   `{ "values": { "dp_alka": "0" }, "states": { "dp_alka": { "visible": true, "enabled": true } } }`.
 - `PUT /api/v1/params/{key}` accepts `{ "value": "1" }` and returns the
   updated value using the same body.
+- `POST /api/v1/actions/reset-calibration` clears saved calibration and torque
+  parameters and notifies the running calibration process.
 
 All parameter values use their existing on-device string representation. The
 API exposes the settings editable in the device UI, not internal cache or

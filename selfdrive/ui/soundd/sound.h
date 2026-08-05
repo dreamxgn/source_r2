@@ -6,6 +6,7 @@
 #include <QSoundEffect>
 #include <QString>
 
+#include "common/params.h"
 #include "system/hardware/hw.h"
 #include "selfdrive/ui/ui.h"
 
@@ -33,6 +34,7 @@ protected:
   bool shouldPlaySound(const Alert &alert);
 
   SubMaster sm;
+  Params params;
   Alert current_alert = {};
   QMap<AudibleAlert, QPair<QSoundEffect *, int>> sounds;
   QSoundEffect *mounting_offset_voice;
@@ -45,6 +47,7 @@ protected:
   QMap<QString, QSoundEffect *> calibration_adjustment_voices;
   QString calibration_adjustment_direction;
   uint64_t last_calibration_adjustment_time = 0;
+  uint64_t last_calibration_param_poll_time = 0;
   bool mounting_offset_detected = false;
   int temperature_warning_level = 0;
   uint64_t last_temperature_warning_time = 0;

@@ -17,7 +17,7 @@
 Sound::Sound(QObject *parent) : sm({"controlsState", "microphone", "carState", "deviceState"}) {
   qInfo() << "default audio device: " << QAudioDeviceInfo::defaultOutputDevice().deviceName();
 
-  dp_device_audible_alert_mode = std::atoi(Params().get("dp_device_audible_alert_mode").c_str());
+  dp_device_audible_alert_mode = std::atoi(params.get("dp_device_audible_alert_mode").c_str());
   for (auto &[alert, fn, loops] : sound_list) {
     QSoundEffect *s = new QSoundEffect(this);
     QObject::connect(s, &QSoundEffect::statusChanged, [=]() {
@@ -82,52 +82,57 @@ void Sound::update() {
     temperature_warning_level = warning_level;
   }
 
-  const bool offset_detected = Params().getBool("MountingOffsetDetected");
-  if (offset_detected && !mounting_offset_detected && dp_device_audible_alert_mode != 2) {
-    mounting_offset_voice->play();
-  }
-  mounting_offset_detected = offset_detected;
-
-  const std::string calibration_result = Params().get("StartupCalibrationResult");
-  if (!calibration_result.empty()) {
-    if (dp_device_audible_alert_mode != 2) {
-      if (calibration_result == "success") {
-        calibration_success_voice->play();
-      } else if (calibration_result == "failure") {
-        calibration_failure_voice->play();
-      } else if (calibration_result == "check_passed") {
-        calibration_check_passed_voice->play();
-      } else if (calibration_result == "recalibrating") {
-        calibration_recalibrating_voice->play();
-      } else if (calibration_result == "initial_calibrating") {
-        calibration_initial_voice->play();
-      }
-    }
-    Params().remove("StartupCalibrationResult");
-  }
-
-  const QString adjustment_direction = QString::fromStdString(Params().get("CalibrationAdjustmentDirection"));
-  const bool adjustment_alert_active = current_alert.sound != AudibleAlert::NONE;
   const uint64_t now = nanos_since_boot();
-  if (adjustment_direction == "recovered") {
-    if (!adjustment_alert_active) {
+  const uint64_t calibration_poll_interval = 500ULL * 1000000;
+  if (last_calibration_param_poll_time == 0 || now - last_calibration_param_poll_time >= calibration_poll_interval) {
+    last_calibration_param_poll_time = now;
+
+    const bool offset_detected = params.getBool("MountingOffsetDetected");
+    if (offset_detected && !mounting_offset_detected && dp_device_audible_alert_mode != 2) {
+      mounting_offset_voice->play();
+    }
+    mounting_offset_detected = offset_detected;
+
+    const std::string calibration_result = params.get("StartupCalibrationResult");
+    if (!calibration_result.empty()) {
       if (dp_device_audible_alert_mode != 2) {
-        calibration_success_voice->play();
+        if (calibration_result == "success") {
+          calibration_success_voice->play();
+        } else if (calibration_result == "failure") {
+          calibration_failure_voice->play();
+        } else if (calibration_result == "check_passed") {
+          calibration_check_passed_voice->play();
+        } else if (calibration_result == "recalibrating") {
+          calibration_recalibrating_voice->play();
+        } else if (calibration_result == "initial_calibrating") {
+          calibration_initial_voice->play();
+        }
       }
-      Params().remove("CalibrationAdjustmentDirection");
-      calibration_adjustment_direction.clear();
-      last_calibration_adjustment_time = 0;
+      params.remove("StartupCalibrationResult");
     }
-  } else if (calibration_adjustment_voices.contains(adjustment_direction)) {
-    if (adjustment_direction != calibration_adjustment_direction) {
-      calibration_adjustment_direction = adjustment_direction;
-      last_calibration_adjustment_time = 0;
-    }
-    const uint64_t repeat_interval = 30ULL * 1000000000;
-    if (!adjustment_alert_active && dp_device_audible_alert_mode != 2 &&
-        (last_calibration_adjustment_time == 0 || now - last_calibration_adjustment_time >= repeat_interval)) {
-      calibration_adjustment_voices[adjustment_direction]->play();
-      last_calibration_adjustment_time = now;
+
+    const QString adjustment_direction = QString::fromStdString(params.get("CalibrationAdjustmentDirection"));
+    const bool adjustment_alert_active = current_alert.sound != AudibleAlert::NONE;
+    if (adjustment_direction == "recovered") {
+      if (!adjustment_alert_active) {
+        if (dp_device_audible_alert_mode != 2) {
+          calibration_success_voice->play();
+        }
+        params.remove("CalibrationAdjustmentDirection");
+        calibration_adjustment_direction.clear();
+        last_calibration_adjustment_time = 0;
+      }
+    } else if (calibration_adjustment_voices.contains(adjustment_direction)) {
+      if (adjustment_direction != calibration_adjustment_direction) {
+        calibration_adjustment_direction = adjustment_direction;
+        last_calibration_adjustment_time = 0;
+      }
+      const uint64_t repeat_interval = 30ULL * 1000000000;
+      if (!adjustment_alert_active && dp_device_audible_alert_mode != 2 &&
+          (last_calibration_adjustment_time == 0 || now - last_calibration_adjustment_time >= repeat_interval)) {
+        calibration_adjustment_voices[adjustment_direction]->play();
+        last_calibration_adjustment_time = now;
+      }
     }
   }
 

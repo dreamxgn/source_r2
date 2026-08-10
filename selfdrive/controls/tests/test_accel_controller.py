@@ -26,6 +26,15 @@ class TestLeadCoasting(unittest.TestCase):
   def test_does_not_coast_without_valid_lead(self):
     self.assertFalse(should_coast_for_lead(20.0, lead(100.0, 18.0, status=False), 1.45))
 
+  def test_coasts_toward_distant_stopped_lead(self):
+    self.assertTrue(should_coast_for_lead(5.0, lead(40.0, 0.0, v_rel=-5.0), 1.45))
+
+  def test_does_not_coast_toward_near_stopped_lead(self):
+    self.assertFalse(should_coast_for_lead(5.0, lead(25.0, 0.0, v_rel=-5.0), 1.45))
+
+  def test_does_not_coast_below_control_speed(self):
+    self.assertFalse(should_coast_for_lead(1.5, lead(20.0, 0.0, v_rel=-1.5), 1.45))
+
 
 class TestLeadPullaway(unittest.TestCase):
   def test_relaxes_accel_change_for_pulling_away_lead(self):

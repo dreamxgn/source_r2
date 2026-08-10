@@ -35,6 +35,7 @@ X_EGO_OBSTACLE_COST = 3.
 X_EGO_COST = 0.
 V_EGO_COST = 0.
 A_EGO_COST = 0.
+A_EGO_COAST_COST = 100.
 J_EGO_COST = 5.0
 A_CHANGE_COST = 200.
 DANGER_ZONE_COST = 100.
@@ -279,9 +280,12 @@ class LongitudinalMpc:
     self.x0 = np.zeros(X_DIM)
     self.set_weights()
 
-  def set_cost_weights(self, cost_weights, constraint_cost_weights):
+  def set_cost_weights(self, cost_weights, constraint_cost_weights, coast_active=False):
     W = np.asfortranarray(np.diag(cost_weights))
     for i in range(N):
+      # Keep the near-term trajectory close to coasting while there is ample
+      # distance, then release the cost so the normal MPC can brake later.
+      W[3,3] = A_EGO_COAST_COST * np.interp(T_IDXS[i], [0.0, 1.5, 3.0], [1.0, 1.0, 0.0]) if coast_active else cost_weights[3]
       # TODO don't hardcode A_CHANGE_COST idx
       # reduce the cost on (a-a_prev) later in the horizon.
       W[4,4] = cost_weights[4] * np.interp(T_IDXS[i], [0.0, 1.0, 2.0], [1.0, 1.0, 0.0])
@@ -295,7 +299,7 @@ class LongitudinalMpc:
     for i in range(N):
       self.solver.cost_set(i, 'Zl', Zl)
 
-  def set_weights(self, prev_accel_constraint=True, personality=log.LongitudinalPersonality.standard):
+  def set_weights(self, prev_accel_constraint=True, personality=log.LongitudinalPersonality.standard, coast_active=False):
     jerk_factor = get_jerk_factor(personality)
     if self.mode == 'acc':
       a_change_cost = A_CHANGE_COST if prev_accel_constraint else 0
@@ -307,7 +311,7 @@ class LongitudinalMpc:
       constraint_cost_weights = [LIMIT_COST, LIMIT_COST, LIMIT_COST, 50.0]
     else:
       raise NotImplementedError(f'Planner mode {self.mode} not recognized in planner cost set')
-    self.set_cost_weights(cost_weights, constraint_cost_weights)
+    self.set_cost_weights(cost_weights, constraint_cost_weights, coast_active=coast_active and self.mode == 'acc')
 
   def set_cur_state(self, v, a):
     v_prev = self.x0[1]

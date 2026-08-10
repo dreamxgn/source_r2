@@ -34,6 +34,7 @@ X_EGO_OBSTACLE_COST = 3.
 X_EGO_COST = 0.
 V_EGO_COST = 0.
 A_EGO_COST = 0.
+A_EGO_COAST_COST = 100.
 J_EGO_COST = 5.0
 A_CHANGE_COST = 200.
 DANGER_ZONE_COST = 100.
@@ -272,7 +273,7 @@ class LongitudinalMpc:
     self.x0 = np.zeros(X_DIM)
     self.set_weights()
 
-  def set_weights(self, prev_accel_constraint=True, personality=log.LongitudinalPersonality.standard):
+  def set_weights(self, prev_accel_constraint=True, personality=log.LongitudinalPersonality.standard, coast_active=False):
     if self.e2e:
       self.set_weights_for_xva_policy()
       self.params[:,0] = -10.
@@ -280,13 +281,16 @@ class LongitudinalMpc:
       self.params[:,2] = 1e5
       self.params[:,4] = get_T_FOLLOW()
     else:
-      self.set_weights_for_lead_policy(prev_accel_constraint, personality)
+      self.set_weights_for_lead_policy(prev_accel_constraint, personality, coast_active)
 
-  def set_weights_for_lead_policy(self, prev_accel_constraint, personality):
+  def set_weights_for_lead_policy(self, prev_accel_constraint, personality, coast_active):
     jerk_factor = get_jerk_factor(personality)
     a_change_cost = A_CHANGE_COST if prev_accel_constraint else 0
     W = np.asfortranarray(np.diag([X_EGO_OBSTACLE_COST, X_EGO_COST, V_EGO_COST, A_EGO_COST, jerk_factor * a_change_cost, jerk_factor * J_EGO_COST]))
     for i in range(N):
+      # Keep the near-term trajectory close to coasting while there is ample
+      # distance, then release the cost so the normal MPC can brake later.
+      W[3,3] = A_EGO_COAST_COST * np.interp(T_IDXS[i], [0.0, 1.5, 3.0], [1.0, 1.0, 0.0]) if coast_active else A_EGO_COST
       # reduce the cost on (a-a_prev) later in the horizon.
       W[4,4] = a_change_cost * np.interp(T_IDXS[i], [0.0, 1.0, 2.0], [1.0, 1.0, 0.0])
       self.solver.cost_set(i, 'W', W)

@@ -93,6 +93,8 @@ Most fork options use `dp_*`. When adding or renaming one, audit all of the foll
 
 Choose the narrowest meaningful checks first, then broaden according to risk. Report exactly what ran and any hardware/data limitations.
 
+For every functional change, run the applicable local validation before moving to device or in-car testing. The macOS development environment may use the repository-local uv virtual environment and compatibility toolchain wrappers; at minimum, run the narrowest relevant tests and a focused SCons build when native code or generated interfaces are affected. Local success is a prerequisite for, not a substitute for, Panda hardware, EON/Comma Two, replay, simulator, or road validation.
+
 - Syntax/style for changed files: `pre-commit run --files <files...>`
 - Full static suite: `pre-commit run --all`
 - Python test file: `pytest path/to/test_file.py` or `python -m unittest path.to.test_module`

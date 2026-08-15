@@ -35,7 +35,6 @@ X_EGO_OBSTACLE_COST = 3.
 X_EGO_COST = 0.
 V_EGO_COST = 0.
 A_EGO_COST = 0.
-A_EGO_COAST_COST = 100.
 J_EGO_COST = 5.0
 A_CHANGE_COST = 200.
 DANGER_ZONE_COST = 100.
@@ -54,16 +53,16 @@ T_IDXS_LST = [index_function(idx, max_val=MAX_T, max_idx=N) for idx in range(N+1
 T_IDXS = np.array(T_IDXS_LST)
 FCW_IDXS = T_IDXS < 5.0
 T_DIFFS = np.diff(T_IDXS, prepend=[0.])
-COMFORT_BRAKE = 2.5
-STOP_DISTANCE = 6.0
+COMFORT_BRAKE = 2.6
+STOP_DISTANCE = 6.5
 
 def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
   if personality==log.LongitudinalPersonality.relaxed:
-    return 1.0
+    return 1.5
   elif personality==log.LongitudinalPersonality.standard:
-    return 1.0
+    return 1.2
   elif personality==log.LongitudinalPersonality.aggressive:
-    return 0.5
+    return 0.6
   else:
     raise NotImplementedError("Longitudinal personality not supported")
 
@@ -80,14 +79,14 @@ def get_T_FOLLOW(personality=log.LongitudinalPersonality.standard):
 
 def get_dynamic_follow(v_ego, personality=log.LongitudinalPersonality.standard):
   if personality==log.LongitudinalPersonality.relaxed:
-    x_vel =  [0,    3.05,   3.61,   4.16,   7.14,   11.11]
-    y_dist = [1.75, 1.75, 1.77, 1.75, 1.8,  1.8]
+    x_vel =  [0.0, 3.0, 6.0, 9.0, 12.0, 15.0]
+    y_dist = [2.5, 2.3, 2.0, 1.9, 1.8, 1.4]
   elif personality==log.LongitudinalPersonality.standard:
-    x_vel =  [0,    3.05,   3.61,   4.16,   7.14,   11.11]
-    y_dist = [1.5,  1.5,  1.51,  1.5,  1.5,  1.45]
+    x_vel =  [0.0, 3.5, 7.0, 10.5, 14.0, 17.5]
+    y_dist = [2.4, 2.2, 2.0, 1.8, 1.6, 1.0]
   elif personality==log.LongitudinalPersonality.aggressive:
-    x_vel =  [0,    3.05,   3.61,   4.16,   7.14,   11.11]
-    y_dist = [1.12, 1.12, 1.13, 1.12, 1.22, 1.22]
+    x_vel =  [0.0, 5.0, 10.0, 15.0, 20.0, 25.0]
+    y_dist = [2.2, 2.0, 1.8, 1.5, 1.2, 0.9]
   else:
     raise NotImplementedError("Dynamic Follow personality not supported")
   return np.interp(v_ego, x_vel, y_dist)
@@ -108,9 +107,9 @@ def get_stopped_equivalence_factor_krkeegen(v_lead, v_ego):
   # away, resulting in an early demand for acceleration.
   v_diff_offset = 0
   if np.all(v_lead - v_ego > 0):
-    v_diff_offset = ((v_lead - v_ego) * 1.)
-    v_diff_offset = np.clip(v_diff_offset, 0, STOP_DISTANCE / 2)
-    v_diff_offset = np.maximum(v_diff_offset * ((10 - v_ego)/10), 0)
+    v_diff_offset = ((v_lead - v_ego) * 1.5)
+    v_diff_offset = np.clip(v_diff_offset, 0, STOP_DISTANCE / 1.5)
+    v_diff_offset = np.maximum(v_diff_offset * ((15 - v_ego)/15), 0)
   distance = (v_lead**2) / (2 * COMFORT_BRAKE) + v_diff_offset
   return distance
 
@@ -280,12 +279,9 @@ class LongitudinalMpc:
     self.x0 = np.zeros(X_DIM)
     self.set_weights()
 
-  def set_cost_weights(self, cost_weights, constraint_cost_weights, coast_active=False):
+  def set_cost_weights(self, cost_weights, constraint_cost_weights):
     W = np.asfortranarray(np.diag(cost_weights))
     for i in range(N):
-      # Keep the near-term trajectory close to coasting while there is ample
-      # distance, then release the cost so the normal MPC can brake later.
-      W[3,3] = A_EGO_COAST_COST * np.interp(T_IDXS[i], [0.0, 1.5, 3.0], [1.0, 1.0, 0.0]) if coast_active else cost_weights[3]
       # TODO don't hardcode A_CHANGE_COST idx
       # reduce the cost on (a-a_prev) later in the horizon.
       W[4,4] = cost_weights[4] * np.interp(T_IDXS[i], [0.0, 1.0, 2.0], [1.0, 1.0, 0.0])
@@ -299,7 +295,7 @@ class LongitudinalMpc:
     for i in range(N):
       self.solver.cost_set(i, 'Zl', Zl)
 
-  def set_weights(self, prev_accel_constraint=True, personality=log.LongitudinalPersonality.standard, coast_active=False):
+  def set_weights(self, prev_accel_constraint=True, personality=log.LongitudinalPersonality.standard):
     jerk_factor = get_jerk_factor(personality)
     if self.mode == 'acc':
       a_change_cost = A_CHANGE_COST if prev_accel_constraint else 0
@@ -311,7 +307,7 @@ class LongitudinalMpc:
       constraint_cost_weights = [LIMIT_COST, LIMIT_COST, LIMIT_COST, 50.0]
     else:
       raise NotImplementedError(f'Planner mode {self.mode} not recognized in planner cost set')
-    self.set_cost_weights(cost_weights, constraint_cost_weights, coast_active=coast_active and self.mode == 'acc')
+    self.set_cost_weights(cost_weights, constraint_cost_weights)
 
   def set_cur_state(self, v, a):
     v_prev = self.x0[1]

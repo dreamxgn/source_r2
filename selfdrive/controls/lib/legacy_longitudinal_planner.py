@@ -130,12 +130,11 @@ class LongitudinalPlanner:
     # clip limits, cannot init MPC outside of bounds
     accel_limits_turns[0] = min(accel_limits_turns[0], self.a_desired + 0.05, a_min_sol)
     accel_limits_turns[1] = max(accel_limits_turns[1], self.a_desired - 0.05)
-    coast_active = should_coast_for_lead(v_ego, sm['radarState'].leadOne, get_T_FOLLOW(self.personality))
-    if coast_active:
+    if should_coast_for_lead(v_ego, sm['radarState'].leadOne, get_T_FOLLOW(self.personality)):
       accel_limits_turns[1] = min(accel_limits_turns[1], max(0.0, self.a_desired - 0.05))
 
     lead_pulling_away = should_relax_accel_change_for_lead(v_ego, sm['radarState'].leadOne, get_T_FOLLOW(self.personality))
-    self.mpc.set_weights(prev_accel_constraint and not lead_pulling_away, personality=self.personality, coast_active=coast_active)
+    self.mpc.set_weights(prev_accel_constraint and not lead_pulling_away, personality=self.personality)
     self.mpc.set_accel_limits(accel_limits_turns[0], accel_limits_turns[1])
     self.mpc.set_cur_state(self.v_desired_filter.x, self.a_desired)
     self.dp_long_use_krkeegen_tune_active = self.dp_long_use_krkeegen_tune and v_ego <= 7.5

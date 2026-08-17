@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <title>legacypilot settings</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <main id="app" class="shell" aria-live="polite">
+    <aside class="sidebar">
+      <button id="home-button" class="home">HOME</button>
+      <nav id="nav">
+        <button class="nav-button active" disabled>Device</button>
+        <button class="nav-button" disabled>Network</button>
+        <button class="nav-button" disabled>Toggles</button>
+        <button class="nav-button" disabled>Software</button>
+        <button class="nav-button" disabled>dragonpilot</button>
+      </nav>
+    </aside>
+    <section class="workspace">
+      <div class="vehicle-row"><span>Vehicle Model:</span><button id="vehicle" class="vehicle">[AUTO SELECT]</button></div>
+      <div id="panel" class="panel"><div class="loading">Loading…</div></div>
+    </section>
+  </main>
+  <main id="home-view" class="home-view" hidden>
+    <aside class="home-sidebar">
+      <button id="settings-button" class="gear-button" aria-label="Settings">⚙</button>
+      <div class="network-strength" id="network-strength"><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="network-type" id="network-type">--</div>
+      <div class="sidebar-metrics">
+        <div class="sidebar-metric"><b>CPU TEMP</b><span id="cpu-temp">N/A</span></div>
+        <div class="sidebar-metric"><b>GPU TEMP</b><span id="gpu-temp">N/A</span></div>
+        <div class="sidebar-metric"><b>MEMORY</b><span id="memory-use">N/A</span></div>
+        <div class="sidebar-metric"><b>STORAGE</b><span id="storage-use">N/A</span></div>
+        <div class="sidebar-metric"><b>VEHICLE</b><span id="vehicle-state">OFFLINE</span></div>
+      </div>
+      <div class="home-state"><span id="home-state-dot"></span><strong id="home-state-text">OFFROAD</strong></div>
+    </aside>
+    <section class="home-content">
+      <header class="home-header"><span id="home-device-name">openpilot</span><span id="home-version"></span></header>
+      <div class="home-grid">
+        <article class="home-card home-summary">
+          <div class="home-car" id="home-car">[AUTO SELECT]</div>
+          <div class="home-status-label">Device status</div>
+          <div class="home-status-value" id="home-status-value">Ready to drive</div>
+        </article>
+        <div class="home-right-column">
+          <article class="home-card">
+            <h2>Live Calibration</h2>
+            <div class="calibration-status">Waiting for data</div>
+            <div class="calibration-track"><span></span></div>
+            <div class="calibration-angles"><span>Pitch: N/A</span><span>Yaw: N/A</span></div>
+          </article>
+          <button id="home-toggles" class="home-card home-shortcut"><strong>Openpilot settings</strong><span>Review driving controls and preferences ›</span></button>
+          <button id="home-device" class="home-card home-shortcut"><strong>Device setup</strong><span>Manage this device ›</span></button>
+        </div>
+      </div>
+    </section>
+  </main>
+  <dialog id="dialog"><form method="dialog"><h2 id="dialog-title"></h2><div id="dialog-body"></div><div class="dialog-actions"><button value="cancel">Cancel</button></div></form></dialog>
+  <script src="/app.js" defer></script>
+</body>
+</html>

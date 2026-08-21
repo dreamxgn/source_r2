@@ -101,6 +101,7 @@ class WebUI:
       states[key] = {"enabled": not self._get_bool(key + "Lock"), "visible": True}
 
     old_model = values.get("dp_0813") == "1"
+    has_long = False
     states["ExperimentalMode"]["visible"] = not old_model
     states["ExperimentalLongitudinalEnabled"]["visible"] = False
     cp_raw = self.params.get("CarParamsPersistent")
@@ -148,6 +149,7 @@ class WebUI:
       },
       "calibration": calibration,
       "driving": driving,
+      "homeModeControlsVisible": (not old_model) and has_long,
     }
 
   def _driving(self, device_state, controls_state):

@@ -112,6 +112,8 @@ function updateHome(){
 }
 
 function updateHomeModes(){
+  $(".home-mode-controls").hidden=!state.data.homeModeControlsVisible;
+  if(!state.data.homeModeControlsVisible)return;
   const modes=[
     {key:"LongitudinalPersonality",labels:["Aggressive","Standard","Relaxed"],value:"#driving-mode-value",options:"#driving-mode-options"},
     {key:"dp_long_accel_profile",labels:["OP","ECO","NOR","SPT"],value:"#accel-mode-value",options:"#accel-mode-options"},

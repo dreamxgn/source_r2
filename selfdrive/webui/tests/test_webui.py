@@ -5,6 +5,7 @@ from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
+from cereal import car
 from openpilot.selfdrive.webui.webui import REPO_ROOT, WebUI, create_server
 
 
@@ -52,6 +53,27 @@ class TestWebUI(unittest.TestCase):
     self.assertEqual(self.request("/")[0], 200)
     status, data = self.request("/api/v1/config"); self.assertEqual(status, 200); self.assertTrue(data["groups"])
     self.assertTrue(data["states"]["OpenpilotEnabledToggle"]["enabled"])
+    self.assertFalse(data["homeModeControlsVisible"])
+
+  def test_home_modes_require_new_model_and_openpilot_longitudinal(self):
+    saved = dict(self.params.values)
+    try:
+      cp = car.CarParams.new_message()
+      cp.experimentalLongitudinalAvailable = True
+      self.params.values["CarParamsPersistent"] = cp.to_bytes()
+      self.params.values["dp_0813"] = b"0"
+      self.params.values["ExperimentalLongitudinalEnabled"] = b"1"
+      _, data = self.request("/api/v1/config")
+      self.assertTrue(data["homeModeControlsVisible"])
+      self.params.values["ExperimentalLongitudinalEnabled"] = b"0"
+      _, data = self.request("/api/v1/config")
+      self.assertFalse(data["homeModeControlsVisible"])
+      self.params.values["dp_0813"] = b"1"
+      self.params.values["ExperimentalLongitudinalEnabled"] = b"1"
+      _, data = self.request("/api/v1/config")
+      self.assertFalse(data["homeModeControlsVisible"])
+    finally:
+      self.params.values = saved
   def test_write_validation(self):
     self.request("/api/v1/params/dp_alka", "PUT", {"value":"1"}); self.assertEqual(self.params.values["dp_alka"], b"1")
     self.request("/api/v1/params/LongitudinalPersonality", "PUT", {"value":"2"}); self.assertEqual(self.params.values["LongitudinalPersonality"], b"2")

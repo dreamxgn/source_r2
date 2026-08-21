@@ -1,10 +1,11 @@
 import json
 import threading
 import unittest
+from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from openpilot.selfdrive.webui.webui import WebUI, create_server
+from openpilot.selfdrive.webui.webui import REPO_ROOT, WebUI, create_server
 
 
 class FakeParams:
@@ -22,7 +23,14 @@ class FakeParams:
 
 class FakeSM:
   def __init__(self):
-    self.data = {"deviceState": type("D", (), {"started": False})(), "controlsState": type("C", (), {"enabled": False})()}
+    status = type("Status", (), {"raw": 2})()
+    calibration = type("Calibration", (), {"calStatus": status, "calPerc": 100, "rpyCalib": [0.0, 0.16, -0.08]})()
+    controls = type("C", (), {"enabled": True, "active": True, "vCruise": 100.0, "vCruiseCluster": 0.0, "alertText1": "Keep hands on wheel", "alertText2": "Driver attention required"})()
+    car_state = type("CarState", (), {"vEgo": 20.0, "vEgoCluster": 0.0})()
+    event_name = type("EventName", (), {"__str__": lambda self: "steerTempUnavailable"})()
+    event = type("Event", (), {"name": event_name})()
+    self.data = {"deviceState": type("D", (), {"started": True})(), "controlsState": controls, "liveCalibration": calibration, "carState": car_state, "carEvents": [event]}
+    self.rcv_frame = {"deviceState": 1, "controlsState": 1, "liveCalibration": 1, "carState": 1, "carEvents": 1}
   def update(self, _): pass
   def __getitem__(self, key): return self.data[key]
 
@@ -46,9 +54,37 @@ class TestWebUI(unittest.TestCase):
     self.assertTrue(data["states"]["OpenpilotEnabledToggle"]["enabled"])
   def test_write_validation(self):
     self.request("/api/v1/params/dp_alka", "PUT", {"value":"1"}); self.assertEqual(self.params.values["dp_alka"], b"1")
+    self.request("/api/v1/params/LongitudinalPersonality", "PUT", {"value":"2"}); self.assertEqual(self.params.values["LongitudinalPersonality"], b"2")
+    self.request("/api/v1/params/dp_long_accel_profile", "PUT", {"value":"3"}); self.assertEqual(self.params.values["dp_long_accel_profile"], b"3")
     with self.assertRaises(HTTPError): self.request("/api/v1/params/dp_alka", "PUT", {"value":"bad"})
   def test_car_selection(self):
     self.request("/api/v1/actions/select-car", "POST", {"value":"TEST CAR"}); self.assertEqual(self.params.values["dp_car_assigned"], b"TEST CAR")
+
+  def test_calibration_angles_and_adjustment(self):
+    _, data = self.request("/api/v1/config")
+    self.assertAlmostEqual(data["calibration"]["pitchDeg"], 9.1673, places=3)
+    self.assertAlmostEqual(data["calibration"]["yawDeg"], -4.5836, places=3)
+    self.assertEqual(data["calibration"]["adjustment"], ["left", "up"])
+
+  def test_driving_overview(self):
+    _, data = self.request("/api/v1/config")
+    self.assertEqual(data["driving"]["status"], "ACTIVE")
+    self.assertAlmostEqual(data["driving"]["speedKph"], 72.0)
+    self.assertEqual(data["driving"]["setSpeedKph"], 100.0)
+    self.assertEqual(data["driving"]["alertText1"], "Keep hands on wheel")
+    self.assertEqual(data["driving"]["events"], ["steerTempUnavailable"])
+
+  def test_pull_update_uses_repository_root_without_lfs(self):
+    def fake_run(command, **kwargs):
+      self.assertEqual(command[:3], ["git", "-C", str(REPO_ROOT)])
+      self.assertEqual(kwargs["cwd"], str(REPO_ROOT))
+      self.assertEqual(kwargs["env"]["GIT_LFS_SKIP_SMUDGE"], "1")
+      return type("Result", (), {"stdout": "abc123\n", "stderr": ""})()
+    with patch("openpilot.selfdrive.webui.webui.subprocess.run", side_effect=fake_run) as run:
+      self.assertEqual(WebUI._git("rev-parse", "--short", "HEAD"), "abc123")
+      with self.assertRaises(HTTPError):
+        self.request("/api/v1/actions/pull-update", "POST", {})
+      self.assertEqual(run.call_count, 1)
 
   def test_car_list_falls_back_when_manager_has_not_started(self):
     saved = self.params.values.pop("dp_car_list")

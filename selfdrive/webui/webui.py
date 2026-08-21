@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 import json
 import logging
+import math
 import mimetypes
 import os
+import subprocess
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import unquote, urlsplit
 
-from cereal import car, messaging
+from cereal import car, log, messaging
 from openpilot.common.params import Params
 from openpilot.system.hardware import HARDWARE
 
@@ -17,7 +20,10 @@ LOG = logging.getLogger("webui")
 HOST = os.getenv("LEGACYPILOT_WEBUI_HOST", "0.0.0.0")
 PORT = int(os.getenv("LEGACYPILOT_WEBUI_PORT", "8082"))
 STATIC_ROOT = Path(__file__).resolve().parent / "static"
+REPO_ROOT = Path(__file__).resolve().parents[2]
 MAX_REQUEST_BODY = 4096
+PITCH_LIMITS = (-0.09074112085129739, 0.14907572052989657)
+YAW_LIMITS = (-0.06912048084718224, 0.06912048084718235)
 
 
 # This is the web equivalent of settings.cc/settings_dp.cc. Values remain
@@ -81,7 +87,8 @@ CONTROL_BY_KEY = {c["key"]: c for group in CONTROL_GROUPS for c in group["contro
 class WebUI:
   def __init__(self, params: Any):
     self.params = params
-    self.sm = messaging.SubMaster(["deviceState", "controlsState"])
+    self.sm = messaging.SubMaster(["deviceState", "controlsState", "liveCalibration", "carState", "carEvents"])
+    self.update_lock = threading.Lock()
 
   def document(self) -> Dict[str, Any]:
     self.sm.update(0)
@@ -116,6 +123,8 @@ class WebUI:
     network_type = getattr(getattr(device_state, "networkType", None), "raw", 0)
     network_names = ("--", "Wi-Fi", "ETH", "2G", "3G", "LTE", "5G")
     network_strength = int(getattr(getattr(device_state, "networkStrength", None), "raw", 0))
+    calibration = self._calibration()
+    driving = self._driving(device_state, controls_state)
     return {
       "groups": CONTROL_GROUPS,
       "values": values,
@@ -137,6 +146,79 @@ class WebUI:
         "networkType": network_names[network_type] if 0 <= network_type < len(network_names) else "--",
         "networkStrength": network_strength,
       },
+      "calibration": calibration,
+      "driving": driving,
+    }
+
+  def _driving(self, device_state, controls_state):
+    frames = getattr(self.sm, "rcv_frame", {})
+    has_controls = frames.get("controlsState", 0) > 0
+    has_car_state = frames.get("carState", 0) > 0
+    car_state = self.sm["carState"]
+    v_ego_cluster = float(getattr(car_state, "vEgoCluster", 0.0)) if has_car_state else 0.0
+    v_ego = v_ego_cluster if v_ego_cluster != 0.0 else float(getattr(car_state, "vEgo", 0.0))
+    v_cruise_cluster = float(getattr(controls_state, "vCruiseCluster", 0.0)) if has_controls else 0.0
+    v_cruise = v_cruise_cluster if v_cruise_cluster != 0.0 else float(getattr(controls_state, "vCruise", 0.0))
+    set_speed = v_cruise if has_controls and 0.0 < v_cruise < 255.0 else None
+    alert_text_1 = str(getattr(controls_state, "alertText1", "")) if has_controls else ""
+    alert_text_2 = str(getattr(controls_state, "alertText2", "")) if has_controls else ""
+    events = []
+    if frames.get("carEvents", 0) > 0:
+      events = [str(getattr(event, "name", "")) for event in self.sm["carEvents"] if getattr(event, "name", None) is not None]
+    onroad = bool(device_state.started)
+    active = bool(getattr(controls_state, "active", False)) if has_controls else False
+    enabled = bool(getattr(controls_state, "enabled", False)) if has_controls else False
+    status = "OFFROAD"
+    if onroad:
+      status = "ACTIVE" if active else "OVERRIDE" if enabled else "STANDBY"
+    return {
+      "available": has_controls and has_car_state,
+      "speedKph": max(0.0, v_ego * 3.6) if has_car_state else None,
+      "setSpeedKph": set_speed,
+      "status": status,
+      "alertText1": alert_text_1,
+      "alertText2": alert_text_2,
+      "events": events[:6],
+    }
+
+  def _calibration(self):
+    calibration = None
+    if getattr(self.sm, "rcv_frame", {}).get("liveCalibration", 0) > 0:
+      calibration = self.sm["liveCalibration"]
+    else:
+      cached = self.params.get("CalibrationParams")
+      if cached:
+        try:
+          calibration = log.Event.from_bytes(cached).liveCalibration
+        except Exception:
+          pass
+    if calibration is None:
+      return {"available": False, "status": "Waiting for data", "progress": 0,
+              "pitchDeg": None, "yawDeg": None, "adjustment": []}
+
+    rpy = list(getattr(calibration, "rpyCalib", []))
+    pitch = float(rpy[1]) if len(rpy) == 3 else None
+    yaw = float(rpy[2]) if len(rpy) == 3 else None
+    status_raw = int(getattr(getattr(calibration, "calStatus", None), "raw", 0))
+    status_names = ("Calibrating", "Calibrated", "Invalid calibration", "Recalibrating")
+    adjustment = []
+    if yaw is not None:
+      if yaw <= YAW_LIMITS[0]:
+        adjustment.append("left")
+      elif yaw >= YAW_LIMITS[1]:
+        adjustment.append("right")
+    if pitch is not None:
+      if pitch <= PITCH_LIMITS[0]:
+        adjustment.append("down")
+      elif pitch >= PITCH_LIMITS[1]:
+        adjustment.append("up")
+    return {
+      "available": pitch is not None and yaw is not None,
+      "status": status_names[status_raw] if 0 <= status_raw < len(status_names) else "Unknown",
+      "progress": max(0, min(100, int(getattr(calibration, "calPerc", 0)))),
+      "pitchDeg": math.degrees(pitch) if pitch is not None else None,
+      "yawDeg": math.degrees(yaw) if yaw is not None else None,
+      "adjustment": adjustment,
     }
 
   def _decode(self, key: str) -> Optional[str]:
@@ -204,8 +286,41 @@ class WebUI:
       if bool(self.sm["controlsState"].enabled):
         raise ValueError("disengage openpilot first")
       self.params.put_bool("DoReboot" if name == "reboot" else "DoShutdown", True)
+    elif name == "pull-update":
+      return self._pull_update()
     else:
       raise ValueError("unsupported action")
+
+  def _pull_update(self):
+    self.sm.update(0)
+    if bool(self.sm["deviceState"].started) or bool(self.sm["controlsState"].enabled):
+      raise ValueError("updates are only allowed while offroad and disengaged")
+    if not self.update_lock.acquire(blocking=False):
+      raise ValueError("an update is already in progress")
+    try:
+      branch = self._git("symbolic-ref", "--quiet", "--short", "HEAD")
+      remote = self._git("config", "--get", "branch.%s.remote" % branch)
+      merge_ref = self._git("config", "--get", "branch.%s.merge" % branch)
+      if not merge_ref.startswith("refs/heads/") or remote not in self._git("remote").splitlines():
+        raise ValueError("the current branch has no valid remote upstream")
+      self._git("fetch", "--no-tags", remote, merge_ref, timeout=300)
+      self._git("reset", "--hard", "FETCH_HEAD", timeout=120)
+      return {"revision": self._git("rev-parse", "--short", "HEAD")}
+    finally:
+      self.update_lock.release()
+
+  @staticmethod
+  def _git(*args, timeout=30):
+    env = os.environ.copy()
+    env["GIT_LFS_SKIP_SMUDGE"] = "1"
+    try:
+      result = subprocess.run(["git", "-C", str(REPO_ROOT)] + list(args), cwd=str(REPO_ROOT), env=env,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              universal_newlines=True, timeout=timeout, check=True)
+      return result.stdout.strip()
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+      stderr = getattr(exc, "stderr", "") or "git command failed"
+      raise ValueError(stderr.strip()[-500:]) from exc
 
 
 def make_handler(api: WebUI):
@@ -238,8 +353,8 @@ def make_handler(api: WebUI):
       if not path.startswith(prefix):
         return self._error(404, "not found")
       try:
-        api.action(unquote(path[len(prefix):]), self._body())
-        self._json(200, {"ok": True})
+        result = api.action(unquote(path[len(prefix):]), self._body()) or {}
+        self._json(200, dict({"ok": True}, **result))
       except (ValueError, json.JSONDecodeError) as exc:
         self._error(400, str(exc))
 

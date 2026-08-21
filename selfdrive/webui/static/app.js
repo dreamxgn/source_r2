@@ -24,7 +24,7 @@ function renderNav() {
 function renderPanel(scrollTop=0) {
   if (state.active === "device") return renderDevice();
   if (state.active === "network") return renderLabels([["IP Address",location.hostname],["Web UI Port",location.port||"80"]]);
-  if (state.active === "software") return renderLabels([["Version",state.data.device.version],["Branch",state.data.device.branch]]);
+  if (state.active === "software") return renderSoftware();
   const group = state.data.groups.find(g=>g.id===state.active);
   $("#panel").innerHTML = group.controls.filter(visible).map(renderControl).join("");
   bindControls();
@@ -63,6 +63,12 @@ function renderDevice() {
 
 function renderLabels(rows){$("#panel").innerHTML=rows.map(r=>`<div class="label-row"><span>${r[0]}</span><span>${r[1]}</span></div>`).join('')}
 
+function renderSoftware(){
+  const d=state.data.device;
+  $("#panel").innerHTML=`<div class="device-grid"><div class="label-row"><span>Version</span><span>${d.version}</span></div><div class="label-row"><span>Branch</span><span>${d.branch}</span></div><div class="control"><div class="control-line"><button class="title">Pull Latest Update</button><button class="action danger" data-action="pull-update">PULL</button></div><div class="description">Force tracked files to match the current branch upstream. Local tracked changes will be lost. Git LFS content will not be downloaded.</div></div></div>`;
+  bindControls();
+}
+
 function updateHome(){
   const d=state.data.device;
   $("#home-device-name").textContent=d.name;
@@ -70,7 +76,18 @@ function updateHome(){
   $("#home-car").textContent=d.car;
   $("#home-state-text").textContent=d.onroad?"ONROAD":"OFFROAD";
   $("#home-state-dot").classList.toggle("onroad",d.onroad);
-  $("#home-status-value").textContent=d.engaged?"openpilot engaged":d.onroad?"Driving":"Ready to drive";
+  const driving=state.data.driving,isMetric=state.data.values.IsMetric==="1",speedFactor=isMetric?1:0.621371,unit=isMetric?"km/h":"mph";
+  const speed=value=>value==null?"--":String(Math.round(value*speedFactor));
+  $("#current-speed").textContent=speed(driving.speedKph);
+  $("#set-speed").textContent=speed(driving.setSpeedKph);
+  document.querySelectorAll(".speed-unit").forEach(x=>x.textContent=unit);
+  $("#drive-state").textContent=driving.status;
+  $("#drive-state").className=`drive-state ${driving.status.toLowerCase()}`;
+  const eventTitle=$("#event-title"),eventDetail=$("#event-detail"),eventBox=$("#event-overview");
+  const humanize=value=>value.replace(/([a-z])([A-Z])/g,"$1 $2").replace(/^./,x=>x.toUpperCase());
+  eventTitle.textContent=driving.alertText1||driving.events.map(humanize).join(" · ")||"No active alerts";
+  eventDetail.textContent=driving.alertText2||(driving.available?"System operating normally":"Waiting for vehicle data");
+  eventBox.classList.toggle("active",Boolean(driving.alertText1||driving.alertText2||driving.events.length));
   $("#network-type").textContent=d.networkType;
   document.querySelectorAll("#network-strength i").forEach((bar,index)=>bar.classList.toggle("active",index<d.networkStrength));
   const temperature=value=>value==null?"N/A":`${Math.round(value)}°C`;
@@ -82,12 +99,49 @@ function updateHome(){
   $("#vehicle-state").textContent=d.car==="[AUTO SELECT]"?"OFFLINE":"ONLINE";
   document.querySelectorAll(".sidebar-metric").forEach(metric=>metric.classList.remove("warning","danger"));
   [["#cpu-temp",d.cpuTempC],["#gpu-temp",d.gpuTempC]].forEach(([selector,value])=>{if(value>=90)$(selector).closest(".sidebar-metric").classList.add("danger");else if(value>=80)$(selector).closest(".sidebar-metric").classList.add("warning")});
+  const calibration=state.data.calibration;
+  $("#calibration-status").textContent=calibration.status;
+  $(".calibration-track span").style.width=`${calibration.progress}%`;
+  const angle=(value,positive,negative)=>value==null?"N/A":`${Math.abs(value).toFixed(2)}° ${value>0?positive:negative}`;
+  $("#calibration-pitch").textContent=`Pitch: ${angle(calibration.pitchDeg,"down","up")}`;
+  $("#calibration-yaw").textContent=`Yaw: ${angle(calibration.yawDeg,"left","right")}`;
+  const adjustment=$("#calibration-adjustment"),directions={left:"← left",right:"right →",up:"↑ up",down:"↓ down"};
+  adjustment.hidden=calibration.adjustment.length===0;
+  adjustment.textContent=calibration.adjustment.length?`Adjust device ${calibration.adjustment.map(x=>directions[x]).join(" and ")}`:"";
+  updateHomeModes();
+}
+
+function updateHomeModes(){
+  const modes=[
+    {key:"LongitudinalPersonality",labels:["Aggressive","Standard","Relaxed"],value:"#driving-mode-value",options:"#driving-mode-options"},
+    {key:"dp_long_accel_profile",labels:["OP","ECO","NOR","SPT"],value:"#accel-mode-value",options:"#accel-mode-options"},
+  ];
+  modes.forEach(mode=>{
+    const value=state.data.values[mode.key]??"0",index=Number(value),enabled=state.data.states[mode.key]?.enabled!==false;
+    $(mode.value).textContent=mode.labels[index]??mode.labels[0];
+    document.querySelectorAll(`${mode.options} [data-home-value]`).forEach(button=>{
+      button.classList.toggle("selected",button.dataset.homeValue===value);
+      button.disabled=!enabled;
+    });
+  });
+}
+
+document.querySelectorAll("[data-home-key]").forEach(button=>button.onclick=async()=>{
+  const key=button.dataset.homeKey,value=button.dataset.homeValue,previous=state.data.values[key];
+  state.data.values[key]=value;updateHomeModes();
+  try{await request(`/api/v1/params/${encodeURIComponent(key)}`,{method:"PUT",body:JSON.stringify({value})});await refreshHome()}
+  catch(e){state.data.values[key]=previous;updateHomeModes();alert(e.message)}
+});
+
+async function refreshHome(){
+  if(document.hidden||$("#home-view").hidden)return;
+  try{state.data=await request("/api/v1/config");updateHome()}catch(_){/* keep the last known status */}
 }
 
 function showHome(){ $("#app").hidden=true; $("#home-view").hidden=false; }
 function showSettings(panel=state.active){ $("#home-view").hidden=true; $("#app").hidden=false; state.active=panel; renderNav(); renderPanel(); }
 
-async function confirmAction(action,title){if(!confirm(`Are you sure you want to ${title.toLowerCase()}?`))return;try{await request(`/api/v1/actions/${action}`,{method:"POST",body:"{}"});await load()}catch(e){alert(e.message)}}
+async function confirmAction(action,title){const message=action==="pull-update"?"Pull the latest remote update and permanently discard all tracked local changes? Git LFS content will not be downloaded.":`Are you sure you want to ${title.toLowerCase()}?`;if(!confirm(message))return;try{const result=await request(`/api/v1/actions/${action}`,{method:"POST",body:"{}"});if(action==="pull-update")alert(`Update complete: ${result.revision}`);await load()}catch(e){alert(e.message)}}
 
 $("#vehicle").onclick=()=>{
   if(!state.data)return;
@@ -107,3 +161,4 @@ function showLoadError(error){
   $(".retry").onclick=()=>load().catch(showLoadError);
 }
 load().catch(showLoadError);
+setInterval(refreshHome,1000);

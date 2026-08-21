@@ -62,15 +62,114 @@ dialog h2 { font-size:40px; text-align:center; } dialog p,dialog select { font-s
 #home-version { color:#aaa; font-size:28px; }
 .home-grid { flex:1; min-height:0; display:grid; grid-template-columns:minmax(0,1fr) 750px; gap:30px; padding-top:25px; }
 .home-card { border:0; border-radius:12px; background:#292929; color:#fff; padding:32px; text-align:left; }
-.home-summary { display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; }
-.home-car { max-width:100%; font-size:42px; color:#aaa; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.home-status-label { margin-top:70px; font-size:28px; color:#aaa; }
-.home-status-value { margin-top:16px; font-size:54px; }
+.home-summary { display:flex; flex-direction:column; min-width:0; }
+.drive-overview-header { display:flex; align-items:center; justify-content:space-between; gap:18px; }
+.home-car { min-width:0; max-width:100%; font-size:29px; color:#aaa; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.drive-state { flex:0 0 auto; padding:8px 13px; border-radius:8px; background:#444; color:#ddd; font-size:18px; font-weight:bold; }.drive-state.active{background:#16883a;color:#fff}.drive-state.override{background:#a86400;color:#fff}.drive-state.standby{background:#3d3d3d}
+.speed-overview { margin-top:24px; display:grid; grid-template-columns:1.45fr 1fr; gap:14px; }
+.speed-tile { min-width:0; min-height:175px; padding:18px; border:1px solid #555; border-radius:12px; background:#171717; display:grid; grid-template-columns:1fr auto; grid-template-rows:auto 1fr; align-items:end; }.speed-tile span{grid-column:1/-1;align-self:start;color:#aaa;font-size:20px}.speed-tile strong{font-size:82px;line-height:.95}.speed-tile small{padding-bottom:7px;color:#aaa;font-size:18px}.set-speed strong{font-size:64px}
+.event-overview { min-height:78px; margin-top:14px; padding:13px 16px; border-left:7px solid #555; background:#1d1d1d; display:flex; flex-direction:column; justify-content:center; gap:5px; }.event-overview strong{font-size:23px}.event-overview span{color:#aaa;font-size:17px}.event-overview.active{border-left-color:#ff9500;background:#352610}
+.home-mode-controls { width:100%; margin-top:20px; display:grid; gap:12px; }
+.home-mode-row { display:grid; grid-template-columns:minmax(115px,145px) minmax(0,1fr); align-items:center; gap:12px; text-align:left; }
+.home-mode-label { min-width:0; display:flex; flex-direction:column; gap:5px; }.home-mode-label strong{font-size:20px}.home-mode-label span{color:#aaa;font-size:17px}
+.home-mode-options { min-width:0; display:grid; grid-auto-flow:column; grid-auto-columns:1fr; gap:5px; }
+.home-mode-options button { min-width:0; height:58px; padding:0 4px; background:#3b3b3b; color:#ddd; font-size:14px; border:1px solid #555; }
+.home-mode-options button.selected { background:#28a745; border-color:#43d45e; color:#fff; }
+.home-mode-options button:disabled { opacity:.35; cursor:not-allowed; }
 .home-right-column { min-height:0; display:grid; grid-template-rows:1fr 1fr 1fr; gap:30px; }
 .home-card h2 { margin:0 0 25px; font-size:38px; }
 .calibration-status { font-size:28px; }
 .calibration-track { height:34px; margin-top:28px; border:2px solid #555; border-radius:8px; background:#111; overflow:hidden; }.calibration-track span{display:block;width:0;height:100%;background:#00c853}
 .calibration-angles { margin-top:22px; display:flex; justify-content:space-between; color:#aaa; font-size:24px; }
+.calibration-adjustment { margin-top:18px; padding:12px 16px; border-left:7px solid #ff453a; background:#481614; color:#fff; font-size:23px; line-height:1.25; }
 .home-shortcut { display:flex; flex-direction:column; justify-content:center; cursor:pointer; }.home-shortcut strong{font-size:38px}.home-shortcut span{margin-top:18px;color:#aaa;font-size:25px}
 @media(max-width:1200px){.home-view{grid-template-columns:220px minmax(0,1fr)}.home-sidebar{padding:22px 18px}.gear-button{width:170px;height:82px;font-size:52px}.network-strength{margin-top:18px}.network-strength i{width:20px;height:20px}.sidebar-metrics{margin-top:18px;gap:9px}.sidebar-metric{min-height:82px}.sidebar-metric b{font-size:17px}.sidebar-metric span{font-size:23px}.home-content{padding:24px}.home-grid{grid-template-columns:minmax(0,1fr) minmax(280px,42%);gap:18px}.home-right-column{gap:18px}.home-card{padding:22px}.home-shortcut strong{font-size:28px}.home-shortcut span{font-size:19px}.home-status-value{font-size:38px}.home-car{font-size:30px}}
-@media(max-width:600px){.shell{grid-template-columns:1fr;grid-template-rows:64px minmax(0,1fr);padding:0}.sidebar{padding:6px 10px;background:#000}.home{display:none}nav{grid-template-columns:repeat(5,max-content);grid-template-rows:1fr;overflow-x:auto;justify-items:start;justify-content:start;gap:24px}.nav-button{font-size:22px;white-space:nowrap}.workspace{min-height:0}.vehicle-row{font-size:22px;min-height:64px}.vehicle{font-size:20px}.panel{border-radius:20px 20px 0 0;padding:16px 22px}.title,.section,.label-row{font-size:25px}.description{font-size:20px;padding:12px}.control-line{min-height:84px}.toggle{width:92px;height:52px;padding:6px}.toggle::after{width:40px;height:40px}.toggle.on::after{transform:translateX(40px)}.choices{flex-wrap:wrap;justify-content:flex-end}.choice{min-width:70px;height:52px;font-size:17px;padding:0 8px}.stepper{width:210px;height:58px;grid-template-columns:54px 1fr 54px;font-size:18px}.stepper button{height:58px;font-size:30px}.action{min-width:110px;height:58px;font-size:20px}}
+@media(max-width:600px){
+  html,body{overflow:hidden}
+  .shell{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);height:100vh;height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);gap:0}
+  .sidebar{min-width:0;padding:4px 10px;overflow:visible;flex-direction:row;align-items:center;gap:12px}
+  .home{display:block;flex:0 0 auto;width:auto;height:38px;padding:0 10px;font-size:14px}
+  nav{display:flex;min-width:0;min-height:52px;overflow-x:auto;overflow-y:hidden;gap:20px;justify-content:flex-start;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  nav::-webkit-scrollbar{display:none}
+  .nav-button{flex:0 0 auto;min-height:48px;padding:0;font-size:20px;white-space:nowrap}
+  .workspace{min-height:0}
+  .vehicle-row{min-height:58px;padding:5px 12px;justify-content:flex-start;gap:9px;font-size:17px}
+  .vehicle-row>span{flex:0 0 auto;white-space:nowrap}
+  .vehicle{min-width:0;max-width:none;flex:1;padding:9px 10px;font-size:16px}
+  .panel{border-radius:18px 18px 0 0;padding:8px 16px calc(16px + env(safe-area-inset-bottom));scrollbar-width:thin}
+  .panel::-webkit-scrollbar,.vehicle-list::-webkit-scrollbar{width:6px}
+  .device-grid{gap:4px}
+  .label-row{display:grid;grid-template-columns:minmax(92px,34%) minmax(0,1fr);min-height:68px;gap:10px;font-size:20px}
+  .label-row span:last-child{min-width:0;margin-left:0;font-size:16px;text-align:right;overflow-wrap:anywhere;word-break:break-word}
+  .control{padding:6px 0}
+  .control-line{min-height:68px;gap:10px;flex-wrap:nowrap}
+  .title,.section{font-size:20px;line-height:1.2}
+  .title{min-width:0}
+  .section{min-height:68px}
+  .description{font-size:16px;line-height:1.4;padding:8px 0 12px}
+  .toggle{flex:0 0 auto;width:82px;height:46px;border-radius:23px;padding:5px}
+  .toggle::after{width:36px;height:36px}
+  .toggle.on::after{transform:translateX(36px)}
+  .choices{max-width:58%;margin-left:auto;flex-wrap:wrap;justify-content:flex-end;gap:4px}
+  .choice{min-width:62px;height:44px;padding:0 7px;font-size:14px}
+  .stepper{flex:0 0 min(185px,55%);width:auto;height:48px;grid-template-columns:46px minmax(0,1fr) 46px;font-size:15px}
+  .stepper button{height:48px;font-size:27px}
+  .action{flex:0 0 auto;min-width:94px;height:48px;padding:0 12px;font-size:16px}
+  .power{grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+  .power button{height:68px;font-size:21px}
+  .loading{padding:24px 6px;font-size:23px}
+  dialog{width:calc(100vw - 24px);max-height:calc(100dvh - 24px);padding:18px 15px}
+  dialog h2{margin:0 0 14px;font-size:25px}
+  .vehicle-list{max-height:60dvh}
+  .vehicle-option{min-height:52px;font-size:17px}
+  .dialog-actions{margin-top:14px}
+  .dialog-actions button{padding:11px 20px}
+
+  .home-view{display:flex;width:100%;height:100vh;height:100dvh;overflow-y:auto;flex-direction:column;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+  .home-sidebar{min-height:auto;padding:10px 14px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px 12px;align-items:center}
+  .gear-button{grid-row:1;width:54px;height:46px;font-size:29px}
+  .network-strength{grid-row:1;margin:0;justify-self:end;gap:4px}
+  .network-strength i{width:11px;height:11px}
+  .network-type{grid-row:1;margin:0;font-size:15px}
+  .sidebar-metrics{grid-column:1/-1;margin:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+  .sidebar-metric{min-width:0;min-height:58px;border-width:1px;border-left-width:6px}
+  .sidebar-metric b{font-size:10px}
+  .sidebar-metric span{font-size:14px}
+  .home-state{grid-column:1/-1;margin:0;justify-self:center;font-size:13px}
+  #home-state-dot{width:12px;height:12px}
+  .home-content{flex:1;min-height:auto;padding:12px 14px 18px}
+  .home-header{min-height:40px;gap:10px;font-size:21px}
+  #home-version{min-width:0;font-size:13px;text-align:right;overflow-wrap:anywhere}
+  .home-grid{display:flex;flex-direction:column;min-height:auto;padding-top:8px;gap:10px}
+  .home-card{padding:18px;border-radius:10px}
+  .home-summary{min-height:0}
+  .home-car{font-size:17px}
+  .drive-overview-header{gap:10px}
+  .drive-state{padding:6px 9px;font-size:13px}
+  .speed-overview{margin-top:14px;grid-template-columns:1.35fr 1fr;gap:8px}
+  .speed-tile{min-height:118px;padding:12px;border-radius:9px}.speed-tile span{font-size:14px}.speed-tile strong{font-size:55px}.speed-tile small{padding-bottom:4px;font-size:12px}.set-speed strong{font-size:43px}
+  .event-overview{min-height:66px;margin-top:9px;padding:10px 12px;border-left-width:5px}.event-overview strong{font-size:17px}.event-overview span{font-size:13px}
+  .home-mode-controls{margin-top:14px;gap:12px}
+  .home-mode-row{grid-template-columns:1fr;gap:7px}
+  .home-mode-label{flex-direction:row;align-items:baseline;justify-content:space-between;gap:10px}
+  .home-mode-label strong{font-size:16px}.home-mode-label span{font-size:14px}
+  .home-mode-options{gap:4px}
+  .home-mode-options button{height:42px;padding:0 4px;font-size:13px}
+  .home-right-column{display:flex;flex-direction:column;gap:10px}
+  .home-card h2{margin-bottom:12px;font-size:23px}
+  .calibration-status{font-size:16px}
+  .calibration-track{height:22px;margin-top:14px}
+  .calibration-angles{margin-top:11px;font-size:13px;gap:10px}
+  .calibration-adjustment{margin-top:10px;padding:9px 11px;border-left-width:5px;font-size:14px}
+  .home-shortcut{min-height:96px}
+  .home-shortcut strong{font-size:22px}
+  .home-shortcut span{margin-top:8px;font-size:15px}
+}
+@media(max-width:360px){
+  .sidebar{gap:8px;padding-left:7px;padding-right:7px}
+  nav{gap:16px}
+  .sidebar-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .control-line{flex-wrap:wrap}
+  .control-line>.toggle,.control-line>.choices,.control-line>.stepper,.control-line>.action{margin-left:auto}
+  .choices{max-width:100%}
+}

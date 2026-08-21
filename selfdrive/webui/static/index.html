@@ -42,16 +42,42 @@
       <header class="home-header"><span id="home-device-name">openpilot</span><span id="home-version"></span></header>
       <div class="home-grid">
         <article class="home-card home-summary">
-          <div class="home-car" id="home-car">[AUTO SELECT]</div>
-          <div class="home-status-label">Device status</div>
-          <div class="home-status-value" id="home-status-value">Ready to drive</div>
+          <div class="drive-overview-header"><div class="home-car" id="home-car">[AUTO SELECT]</div><div class="drive-state" id="drive-state">OFFROAD</div></div>
+          <div class="speed-overview">
+            <div class="speed-tile current-speed"><span>Current speed</span><strong id="current-speed">--</strong><small class="speed-unit">km/h</small></div>
+            <div class="speed-tile set-speed"><span>Set speed</span><strong id="set-speed">--</strong><small class="speed-unit">km/h</small></div>
+          </div>
+          <div class="event-overview" id="event-overview">
+            <strong id="event-title">No active alerts</strong>
+            <span id="event-detail">openpilot events will appear here</span>
+          </div>
+          <div class="home-mode-controls">
+            <div class="home-mode-row">
+              <div class="home-mode-label"><strong>Driving Mode</strong><span id="driving-mode-value">Standard</span></div>
+              <div class="home-mode-options" id="driving-mode-options">
+                <button data-home-key="LongitudinalPersonality" data-home-value="0">Aggressive</button>
+                <button data-home-key="LongitudinalPersonality" data-home-value="1">Standard</button>
+                <button data-home-key="LongitudinalPersonality" data-home-value="2">Relaxed</button>
+              </div>
+            </div>
+            <div class="home-mode-row">
+              <div class="home-mode-label"><strong>Acceleration Mode</strong><span id="accel-mode-value">OP</span></div>
+              <div class="home-mode-options" id="accel-mode-options">
+                <button data-home-key="dp_long_accel_profile" data-home-value="0">OP</button>
+                <button data-home-key="dp_long_accel_profile" data-home-value="1">ECO</button>
+                <button data-home-key="dp_long_accel_profile" data-home-value="2">NOR</button>
+                <button data-home-key="dp_long_accel_profile" data-home-value="3">SPT</button>
+              </div>
+            </div>
+          </div>
         </article>
         <div class="home-right-column">
           <article class="home-card">
             <h2>Live Calibration</h2>
-            <div class="calibration-status">Waiting for data</div>
+            <div class="calibration-status" id="calibration-status">Waiting for data</div>
             <div class="calibration-track"><span></span></div>
-            <div class="calibration-angles"><span>Pitch: N/A</span><span>Yaw: N/A</span></div>
+            <div class="calibration-angles"><span id="calibration-pitch">Pitch: N/A</span><span id="calibration-yaw">Yaw: N/A</span></div>
+            <div class="calibration-adjustment" id="calibration-adjustment" hidden></div>
           </article>
           <button id="home-toggles" class="home-card home-shortcut"><strong>Openpilot settings</strong><span>Review driving controls and preferences ›</span></button>
           <button id="home-device" class="home-card home-shortcut"><strong>Device setup</strong><span>Manage this device ›</span></button>

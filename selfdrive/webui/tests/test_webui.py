@@ -1,12 +1,17 @@
 import json
 import threading
 import unittest
+from io import BytesIO
 from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
+import numpy as np
 from cereal import car
-from openpilot.selfdrive.webui.webui import REPO_ROOT, WebUI, create_server
+from PIL import Image
+
+from openpilot.selfdrive.webui.webui import (REPO_ROOT, RoadCameraStream, WebUI,
+                                             create_server)
 
 
 class FakeParams:
@@ -95,6 +100,42 @@ class TestWebUI(unittest.TestCase):
     self.assertEqual(data["driving"]["setSpeedKph"], 100.0)
     self.assertEqual(data["driving"]["alertText1"], "Keep hands on wheel")
     self.assertEqual(data["driving"]["events"], ["steerTempUnavailable"])
+
+  def test_road_camera_jpeg_encoding(self):
+    # Two BGR rows with padding exercise the VisionIPC stride handling.
+    buf = type("Buffer", (), {"width": 2, "height": 2, "stride": 8,
+                               "data": np.array([0, 0, 255, 0, 255, 0, 0, 0,
+                                                 255, 0, 0, 255, 255, 255, 0, 0],
+                                                dtype=np.uint8)})()
+    encoded = RoadCameraStream.encode(buf)
+    image = Image.open(BytesIO(encoded))
+    self.assertEqual(image.size, (2, 2))
+    self.assertEqual(image.format, "JPEG")
+
+  def test_road_camera_mjpeg_endpoint(self):
+    class FakeRoadStream(RoadCameraStream):
+      @staticmethod
+      def frames():
+        yield b"jpeg-frame"
+
+    server = create_server("127.0.0.1", 0, WebUI(self.params), FakeRoadStream())
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+      url = "http://127.0.0.1:%d/api/v1/road-camera.mjpeg" % (
+        server.server_port,
+      )
+      with urlopen(url, timeout=2) as response:
+        body = response.read()
+        self.assertIn(
+          "multipart/x-mixed-replace", response.headers["Content-Type"]
+        )
+        self.assertIn(b"Content-Type: image/jpeg", body)
+        self.assertIn(b"jpeg-frame", body)
+    finally:
+      server.shutdown()
+      server.server_close()
+      thread.join(2)
 
   def test_pull_update_uses_repository_root_without_lfs(self):
     def fake_run(command, **kwargs):

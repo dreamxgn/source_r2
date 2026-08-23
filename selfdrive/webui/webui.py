@@ -6,14 +6,18 @@ import mimetypes
 import os
 import subprocess
 import threading
+import time
+from io import BytesIO
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Iterator, Optional
 from urllib.parse import unquote, urlsplit
 
 from cereal import car, log, messaging
+from cereal.visionipc import VisionIpcClient, VisionStreamType
 from openpilot.common.params import Params
 from openpilot.system.hardware import HARDWARE
+from PIL import Image
 
 
 LOG = logging.getLogger("webui")
@@ -24,6 +28,50 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 MAX_REQUEST_BODY = 4096
 PITCH_LIMITS = (-0.09074112085129739, 0.14907572052989657)
 YAW_LIMITS = (-0.06912048084718224, 0.06912048084718235)
+ROAD_STREAM_SIZE = (640, 480)
+ROAD_STREAM_FPS = 5.0
+ROAD_STREAM_QUALITY = 55
+MJPEG_BOUNDARY = "legacypilotframe"
+
+
+class RoadCameraStream:
+  """On-demand, low-rate MJPEG preview of camerad's RGB road stream."""
+  def frames(self) -> Iterator[bytes]:
+    client = VisionIpcClient("camerad", VisionStreamType.VISION_STREAM_RGB_ROAD, True)
+    connect_deadline = time.monotonic() + 10.0
+    while not client.connect(False):
+      if time.monotonic() >= connect_deadline:
+        return
+      time.sleep(0.1)
+
+    frame_interval = 1.0 / ROAD_STREAM_FPS
+    last_frame_time = 0.0
+    missed_frames = 0
+    while True:
+      buf = client.recv(1000)
+      if buf is None:
+        missed_frames += 1
+        if missed_frames >= 5:
+          return
+        continue
+      missed_frames = 0
+
+      now = time.monotonic()
+      if now - last_frame_time < frame_interval:
+        continue
+      last_frame_time = now
+      yield self.encode(buf)
+
+  @staticmethod
+  def encode(buf) -> bytes:
+    # RGB VisionIPC buffers on these devices are stored as interleaved BGR.
+    image = Image.frombuffer(
+      "RGB", (buf.width, buf.height), buf.data, "raw", "BGR", buf.stride, 1
+    )
+    image.thumbnail(ROAD_STREAM_SIZE, Image.Resampling.BILINEAR)
+    output = BytesIO()
+    image.save(output, "JPEG", quality=ROAD_STREAM_QUALITY)
+    return output.getvalue()
 
 
 # This is the web equivalent of settings.cc/settings_dp.cc. Values remain
@@ -325,7 +373,7 @@ class WebUI:
       raise ValueError(stderr.strip()[-500:]) from exc
 
 
-def make_handler(api: WebUI):
+def make_handler(api: WebUI, road_stream: RoadCameraStream):
   class Handler(BaseHTTPRequestHandler):
     server_version = "LegacypilotWebUI/1"
 
@@ -335,6 +383,8 @@ def make_handler(api: WebUI):
         return self._json(200, api.document())
       if path == "/api/v1/health":
         return self._json(200, {"ok": True})
+      if path == "/api/v1/road-camera.mjpeg":
+        return self._road_camera()
       self._static(path)
 
     def do_PUT(self):
@@ -384,6 +434,26 @@ def make_handler(api: WebUI):
       self.end_headers()
       self.wfile.write(data)
 
+    def _road_camera(self):
+      self.send_response(200)
+      self.send_header(
+        "Content-Type", "multipart/x-mixed-replace; boundary=%s" % MJPEG_BOUNDARY
+      )
+      self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+      self.send_header("Pragma", "no-cache")
+      self.end_headers()
+      try:
+        for frame in road_stream.frames():
+          self.wfile.write(("--%s\r\n" % MJPEG_BOUNDARY).encode("ascii"))
+          self.wfile.write(b"Content-Type: image/jpeg\r\n")
+          content_length = "Content-Length: %d\r\n\r\n" % len(frame)
+          self.wfile.write(content_length.encode("ascii"))
+          self.wfile.write(frame)
+          self.wfile.write(b"\r\n")
+          self.wfile.flush()
+      except (BrokenPipeError, ConnectionResetError):
+        pass
+
     def _json(self, status, payload):
       data = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
       self.send_response(status)
@@ -402,8 +472,14 @@ def make_handler(api: WebUI):
   return Handler
 
 
-def create_server(host: str, port: int, api: WebUI):
-  return ThreadingHTTPServer((host, port), make_handler(api))
+class WebUIHTTPServer(ThreadingHTTPServer):
+  daemon_threads = True
+
+
+def create_server(host: str, port: int, api: WebUI,
+                  road_stream: Optional[RoadCameraStream] = None):
+  handler = make_handler(api, road_stream or RoadCameraStream())
+  return WebUIHTTPServer((host, port), handler)
 
 
 def main():

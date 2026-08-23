@@ -66,6 +66,10 @@ dialog h2 { font-size:40px; text-align:center; } dialog p,dialog select { font-s
 .drive-overview-header { display:flex; align-items:center; justify-content:space-between; gap:18px; }
 .home-car { min-width:0; max-width:100%; font-size:29px; color:#aaa; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .drive-state { flex:0 0 auto; padding:8px 13px; border-radius:8px; background:#444; color:#ddd; font-size:18px; font-weight:bold; }.drive-state.active{background:#16883a;color:#fff}.drive-state.override{background:#a86400;color:#fff}.drive-state.standby{background:#3d3d3d}
+.road-video-panel { margin-top:18px; }
+.road-video-toolbar { min-height:50px; display:flex; align-items:center; justify-content:space-between; gap:16px; }.road-video-toolbar>div{display:flex;flex-direction:column;gap:3px}.road-video-toolbar strong{font-size:20px}.road-video-toolbar span{color:#aaa;font-size:15px}
+.road-video-switch { position:relative; flex:0 0 auto; width:66px; height:38px; cursor:pointer; }.road-video-switch input{position:absolute;opacity:0;pointer-events:none}.road-video-switch span{display:block;width:100%;height:100%;padding:4px;border-radius:19px;background:#444;transition:.15s}.road-video-switch span::after{content:"";display:block;width:30px;height:30px;border-radius:50%;background:#bbb;transition:.15s}.road-video-switch input:checked+span{background:#28a745}.road-video-switch input:checked+span::after{transform:translateX(28px);background:#fff}
+.road-video-frame { position:relative; width:100%; aspect-ratio:4/3; max-height:390px; overflow:hidden; border:1px solid #555; border-radius:10px; background:#111; display:flex; align-items:center; justify-content:center; }.road-video-frame img{width:100%;height:100%;object-fit:contain}.road-video-frame>div{padding:20px;color:#888;font-size:17px;text-align:center}
 .speed-overview { margin-top:24px; display:grid; grid-template-columns:1.45fr 1fr; gap:14px; }
 .speed-tile { min-width:0; min-height:175px; padding:18px; border:1px solid #555; border-radius:12px; background:#171717; display:grid; grid-template-columns:1fr auto; grid-template-rows:auto 1fr; align-items:end; }.speed-tile span{grid-column:1/-1;align-self:start;color:#aaa;font-size:20px}.speed-tile strong{font-size:82px;line-height:.95}.speed-tile small{padding-bottom:7px;color:#aaa;font-size:18px}.set-speed strong{font-size:64px}
 .event-overview { min-height:78px; margin-top:14px; padding:13px 16px; border-left:7px solid #555; background:#1d1d1d; display:flex; flex-direction:column; justify-content:center; gap:5px; }.event-overview strong{font-size:23px}.event-overview span{color:#aaa;font-size:17px}.event-overview.active{border-left-color:#ff9500;background:#352610}
@@ -83,7 +87,7 @@ dialog h2 { font-size:40px; text-align:center; } dialog p,dialog select { font-s
 .calibration-angles { margin-top:22px; display:flex; justify-content:space-between; color:#aaa; font-size:24px; }
 .calibration-adjustment { margin-top:18px; padding:12px 16px; border-left:7px solid #ff453a; background:#481614; color:#fff; font-size:23px; line-height:1.25; }
 .home-shortcut { display:flex; flex-direction:column; justify-content:center; cursor:pointer; }.home-shortcut strong{font-size:38px}.home-shortcut span{margin-top:18px;color:#aaa;font-size:25px}
-@media(max-width:1200px){.home-view{grid-template-columns:220px minmax(0,1fr)}.home-sidebar{padding:22px 18px}.gear-button{width:170px;height:82px;font-size:52px}.network-strength{margin-top:18px}.network-strength i{width:20px;height:20px}.sidebar-metrics{margin-top:18px;gap:9px}.sidebar-metric{min-height:82px}.sidebar-metric b{font-size:17px}.sidebar-metric span{font-size:23px}.home-content{padding:24px}.home-grid{grid-template-columns:minmax(0,1fr) minmax(280px,42%);gap:18px}.home-right-column{gap:18px}.home-card{padding:22px}.home-shortcut strong{font-size:28px}.home-shortcut span{font-size:19px}.home-status-value{font-size:38px}.home-car{font-size:30px}}
+@media(max-width:1500px){.home-view{grid-template-columns:220px minmax(0,1fr)}.home-sidebar{padding:22px 18px}.gear-button{width:170px;height:82px;font-size:52px}.network-strength{margin-top:18px}.network-strength i{width:20px;height:20px}.sidebar-metrics{margin-top:18px;gap:9px}.sidebar-metric{min-height:82px}.sidebar-metric b{font-size:17px}.sidebar-metric span{font-size:23px}.home-content{padding:24px;overflow-y:auto}.home-grid{grid-template-columns:minmax(0,1fr) minmax(280px,42%);gap:18px}.home-right-column{gap:18px}.home-card{padding:22px}.home-shortcut strong{font-size:28px}.home-shortcut span{font-size:19px}.home-status-value{font-size:38px}.home-car{font-size:30px}}
 @media(max-width:600px){
   html,body{overflow:hidden}
   .shell{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);height:100vh;height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);gap:0}
@@ -146,6 +150,10 @@ dialog h2 { font-size:40px; text-align:center; } dialog p,dialog select { font-s
   .home-car{font-size:17px}
   .drive-overview-header{gap:10px}
   .drive-state{padding:6px 9px;font-size:13px}
+  .road-video-panel{margin-top:10px}
+  .road-video-toolbar{min-height:42px}.road-video-toolbar strong{font-size:15px}.road-video-toolbar span{font-size:12px}
+  .road-video-switch{width:54px;height:32px}.road-video-switch span{padding:4px}.road-video-switch span::after{width:24px;height:24px}.road-video-switch input:checked+span::after{transform:translateX(22px)}
+  .road-video-frame{max-height:none;border-radius:8px}.road-video-frame>div{font-size:13px}
   .speed-overview{margin-top:14px;grid-template-columns:1.35fr 1fr;gap:8px}
   .speed-tile{min-height:118px;padding:12px;border-radius:9px}.speed-tile span{font-size:14px}.speed-tile strong{font-size:55px}.speed-tile small{padding-bottom:4px;font-size:12px}.set-speed strong{font-size:43px}
   .event-overview{min-height:66px;margin-top:9px;padding:10px 12px;border-left-width:5px}.event-overview strong{font-size:17px}.event-overview span{font-size:13px}

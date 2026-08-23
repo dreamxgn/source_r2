@@ -1,5 +1,6 @@
-const state = { data:null, active:"device" };
+const state = { data:null, active:"device", videoEnabled:localStorage.getItem("roadVideoEnabled")==="1", videoStreaming:false };
 const $ = s => document.querySelector(s);
+const EMPTY_IMAGE = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
 
 async function request(path, options={}) {
   const response = await fetch(path, {headers:{"Content-Type":"application/json"}, ...options});
@@ -108,7 +109,25 @@ function updateHome(){
   const adjustment=$("#calibration-adjustment"),directions={left:"← left",right:"right →",up:"↑ up",down:"↓ down"};
   adjustment.hidden=calibration.adjustment.length===0;
   adjustment.textContent=calibration.adjustment.length?`Adjust device ${calibration.adjustment.map(x=>directions[x]).join(" and ")}`:"";
+  updateRoadVideo();
   updateHomeModes();
+}
+
+function updateRoadVideo(){
+  const video=$("#road-video"),placeholder=$("#road-video-placeholder"),status=$("#road-video-status"),toggle=$("#road-video-toggle");
+  const homeVisible=!$("#home-view").hidden,shouldStream=state.videoEnabled&&state.data?.device.onroad&&!document.hidden&&homeVisible;
+  toggle.checked=state.videoEnabled;
+  if(shouldStream&&!state.videoStreaming){
+    state.videoStreaming=true;
+    video.hidden=false;placeholder.hidden=true;status.textContent="Connecting…";
+    video.src=`/api/v1/road-camera.mjpeg?t=${Date.now()}`;
+  }else if(!shouldStream&&state.videoStreaming){
+    state.videoStreaming=false;
+    video.src=EMPTY_IMAGE;video.hidden=true;placeholder.hidden=false;
+  }
+  if(!state.videoEnabled){status.textContent="Video off";placeholder.textContent="Turn on video to view the road camera"}
+  else if(!state.data?.device.onroad){status.textContent="Waiting for onroad";placeholder.textContent="Road video is available while driving"}
+  else if(!shouldStream){status.textContent="Paused";placeholder.textContent="Video paused while this page is hidden"}
 }
 
 function updateHomeModes(){
@@ -140,8 +159,8 @@ async function refreshHome(){
   try{state.data=await request("/api/v1/config");updateHome()}catch(_){/* keep the last known status */}
 }
 
-function showHome(){ $("#app").hidden=true; $("#home-view").hidden=false; }
-function showSettings(panel=state.active){ $("#home-view").hidden=true; $("#app").hidden=false; state.active=panel; renderNav(); renderPanel(); }
+function showHome(){ $("#app").hidden=true; $("#home-view").hidden=false; updateRoadVideo(); }
+function showSettings(panel=state.active){ $("#home-view").hidden=true; $("#app").hidden=false; updateRoadVideo(); state.active=panel; renderNav(); renderPanel(); }
 
 async function confirmAction(action,title){const message=action==="pull-update"?"Pull the latest remote update and permanently discard all tracked local changes? Git LFS content will not be downloaded.":`Are you sure you want to ${title.toLowerCase()}?`;if(!confirm(message))return;try{const result=await request(`/api/v1/actions/${action}`,{method:"POST",body:"{}"});if(action==="pull-update")alert(`Update complete: ${result.revision}`);await load()}catch(e){alert(e.message)}}
 
@@ -157,6 +176,10 @@ $("#home-button").onclick=showHome;
 $("#settings-button").onclick=()=>showSettings();
 $("#home-toggles").onclick=()=>showSettings("toggles");
 $("#home-device").onclick=()=>showSettings("device");
+$("#road-video-toggle").onchange=event=>{state.videoEnabled=event.target.checked;localStorage.setItem("roadVideoEnabled",state.videoEnabled?"1":"0");updateRoadVideo()};
+$("#road-video").onload=()=>{if(state.videoStreaming)$("#road-video-status").textContent="LIVE"};
+$("#road-video").onerror=()=>{if(state.videoStreaming){state.videoStreaming=false;$("#road-video-status").textContent="Video unavailable";$("#road-video").hidden=true;$("#road-video-placeholder").hidden=false;$("#road-video-placeholder").textContent="Unable to receive road camera video"}};
+document.addEventListener("visibilitychange",updateRoadVideo);
 
 function showLoadError(error){
   $("#panel").innerHTML=`<div class="loading">Unable to load settings.<br><small>${error.message}</small><br><button class="retry">Retry</button></div>`;

@@ -43,6 +43,16 @@
       <div class="home-grid">
         <article class="home-card home-summary">
           <div class="drive-overview-header"><div class="home-car" id="home-car">[AUTO SELECT]</div><div class="drive-state" id="drive-state">OFFROAD</div></div>
+          <div class="road-video-panel">
+            <div class="road-video-toolbar">
+              <div><strong>Road camera</strong><span id="road-video-status">Video off</span></div>
+              <label class="road-video-switch" aria-label="Show road camera video"><input id="road-video-toggle" type="checkbox"><span></span></label>
+            </div>
+            <div class="road-video-frame">
+              <img id="road-video" alt="Live road camera" hidden>
+              <div id="road-video-placeholder">Turn on video to view the road camera</div>
+            </div>
+          </div>
           <div class="speed-overview">
             <div class="speed-tile current-speed"><span>Current speed</span><strong id="current-speed">--</strong><small class="speed-unit">km/h</small></div>
             <div class="speed-tile set-speed"><span>Set speed</span><strong id="set-speed">--</strong><small class="speed-unit">km/h</small></div>

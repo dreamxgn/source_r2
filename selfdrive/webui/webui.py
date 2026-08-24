@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, Optional
 from urllib.parse import unquote, urlsplit
 
+import numpy as np
 from cereal import car, log, messaging
 from cereal.visionipc import VisionIpcClient, VisionStreamType
 from openpilot.common.params import Params
@@ -32,11 +33,18 @@ ROAD_STREAM_SIZE = (640, 480)
 ROAD_STREAM_FPS = 5.0
 ROAD_STREAM_QUALITY = 55
 MJPEG_BOUNDARY = "legacypilotframe"
+ROAD_STREAM_RESAMPLE = getattr(Image, "Resampling", Image).BILINEAR
 
 
 class RoadCameraStream:
   """On-demand, low-rate MJPEG preview of camerad's RGB road stream."""
   def frames(self) -> Iterator[bytes]:
+    try:
+      yield from self._frames()
+    except Exception:
+      LOG.exception("road camera stream failed")
+
+  def _frames(self) -> Iterator[bytes]:
     client = VisionIpcClient("camerad", VisionStreamType.VISION_STREAM_RGB_ROAD, True)
     connect_deadline = time.monotonic() + 10.0
     while not client.connect(False):
@@ -65,10 +73,16 @@ class RoadCameraStream:
   @staticmethod
   def encode(buf) -> bytes:
     # RGB VisionIPC buffers on these devices are stored as interleaved BGR.
-    image = Image.frombuffer(
-      "RGB", (buf.width, buf.height), buf.data, "raw", "BGR", buf.stride, 1
+    # Convert through numpy like camerad/snapshot.py does. Older device Pillow
+    # builds do not reliably accept VisionBuf's writable numpy view in
+    # Image.frombuffer().
+    rows = np.asarray(buf.data)[:buf.stride * buf.height].reshape(
+      buf.height, buf.stride
     )
-    image.thumbnail(ROAD_STREAM_SIZE, Image.Resampling.BILINEAR)
+    bgr = rows[:, :buf.width * 3].reshape(buf.height, buf.width, 3)
+    image = Image.fromarray(bgr[:, :, ::-1])
+    # EON images can carry an older Pillow without the Image.Resampling enum.
+    image.thumbnail(ROAD_STREAM_SIZE, ROAD_STREAM_RESAMPLE)
     output = BytesIO()
     image.save(output, "JPEG", quality=ROAD_STREAM_QUALITY)
     return output.getvalue()

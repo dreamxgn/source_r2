@@ -12,8 +12,14 @@ COAST_MIN_EXTRA_DISTANCE = 5.0
 COAST_MAX_REQUIRED_DECEL = -0.8
 COAST_COMFORT_BRAKE = 2.5
 COAST_STOP_DISTANCE = 6.0
-LEAD_PULLAWAY_MIN_SPEED_DELTA = 0.5
-LEAD_PULLAWAY_MIN_DISTANCE_MARGIN = 0.5
+LEAD_PULLAWAY_MIN_SPEED_DELTA = 0.25
+LEAD_PULLAWAY_ACCEL_SPEED_DELTA = 0.1
+LEAD_PULLAWAY_MIN_ACCEL = 0.3
+LEAD_PULLAWAY_MIN_DISTANCE_MARGIN = 0.0
+LEAD_GAP_RECOVERY_MIN_EXTRA_DISTANCE = 2.0
+LEAD_GAP_RECOVERY_MIN_CLOSING_SPEED = 0.25
+LEAD_GAP_RECOVERY_MAX_CLOSING_SPEED = 1.0
+LEAD_GAP_RECOVERY_CLOSING_DISTANCE = 10.0
 
 
 def should_coast_for_lead(v_ego, lead, t_follow):
@@ -37,10 +43,23 @@ def should_coast_for_lead(v_ego, lead, t_follow):
 
 
 def should_relax_accel_change_for_lead(v_ego, lead, t_follow):
-  """Allow a prompt acceleration recovery once a safely-spaced lead pulls away."""
-  minimum_distance = t_follow * max(float(v_ego), 0.0) + COAST_STOP_DISTANCE + LEAD_PULLAWAY_MIN_DISTANCE_MARGIN
+  """Allow prompt acceleration when a safely-spaced lead pulls away or the gap is excessive."""
+  v_ego = max(float(v_ego), 0.0)
+  v_lead = max(float(lead.vLead), 0.0) if lead is not None else 0.0
+  braking_distance = max((v_ego ** 2 - v_lead ** 2) / (2.0 * COAST_COMFORT_BRAKE), 0.0)
+  minimum_distance = braking_distance + t_follow * v_ego + COAST_STOP_DISTANCE + LEAD_PULLAWAY_MIN_DISTANCE_MARGIN
+  speed_delta = v_lead - v_ego
+  lead_accel = float(getattr(lead, 'aLeadK', 0.0)) if lead is not None else 0.0
+  lead_is_pulling_away = (speed_delta >= LEAD_PULLAWAY_MIN_SPEED_DELTA or
+                          (speed_delta >= LEAD_PULLAWAY_ACCEL_SPEED_DELTA and lead_accel >= LEAD_PULLAWAY_MIN_ACCEL))
+  extra_distance = float(lead.dRel) - minimum_distance if lead is not None else 0.0
+  allowed_closing_speed = min(LEAD_GAP_RECOVERY_MAX_CLOSING_SPEED,
+                              max(LEAD_GAP_RECOVERY_MIN_CLOSING_SPEED,
+                                  extra_distance / LEAD_GAP_RECOVERY_CLOSING_DISTANCE))
+  gap_recovery_needed = (extra_distance >= LEAD_GAP_RECOVERY_MIN_EXTRA_DISTANCE and
+                         speed_delta >= -allowed_closing_speed)
   return (lead is not None and lead.status and
-          float(lead.vLead) - float(v_ego) >= LEAD_PULLAWAY_MIN_SPEED_DELTA and
+          (lead_is_pulling_away or gap_recovery_needed) and
           float(lead.dRel) >= minimum_distance)
 
 # accel profile by @arne182 modified by cgw

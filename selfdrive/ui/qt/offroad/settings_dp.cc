@@ -73,7 +73,7 @@ void DPCtrlPanel::add_lateral_toggles() {
                                                   tr("All Speed - Use Lane Line when available.\n*Number* - Use Lane Line when available and drive speed is above the *number*."),
                                                   "", 0, 120, 1, tr(" kph"), tr("All Speed"));
 
-  std::vector<QString> dp_lat_controller_texts{tr("DEFAULT"), tr("INDI"), tr("LQR")};
+  std::vector<QString> dp_lat_controller_texts{tr("DEFAULT"), tr("INDI"), tr("LQR"), tr("TORQUE")};
   ButtonParamControl* dp_lat_controller_setting = new ButtonParamControl("dp_lat_controller", tr("Lateral Controller"),
                                           tr("Change your lateral controller.\nUSE AT YOUR OWN RISK!\nReboot required."),
                                           "",

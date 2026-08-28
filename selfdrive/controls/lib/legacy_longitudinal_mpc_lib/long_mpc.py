@@ -36,6 +36,9 @@ V_EGO_COST = 0.
 A_EGO_COST = 0.
 J_EGO_COST = 5.0
 A_CHANGE_COST = 200.
+LEAD_ACCEL_RELAXED_JERK_FACTOR = 0.5
+# Only used after the safe target gap is met; acceleration limits remain unchanged.
+LEAD_ACCEL_RELAXED_OBSTACLE_FACTOR = 6.0
 DANGER_ZONE_COST = 100.
 CRASH_DISTANCE = .5
 LIMIT_COST = 1e6
@@ -51,8 +54,8 @@ T_IDXS_LST = [index_function(idx, max_val=MAX_T, max_idx=N) for idx in range(N+1
 T_IDXS = np.array(T_IDXS_LST)
 T_DIFFS = np.diff(T_IDXS, prepend=[0.])
 MIN_ACCEL = -3.5
-COMFORT_BRAKE = 2.6
-STOP_DISTANCE = 6.5
+COMFORT_BRAKE = 2.5
+STOP_DISTANCE = 6.0
 
 def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
   if personality==log.LongitudinalPersonality.relaxed:
@@ -78,13 +81,13 @@ def get_T_FOLLOW(personality=log.LongitudinalPersonality.standard):
 def get_dynamic_follow(v_ego, personality=log.LongitudinalPersonality.standard):
   if personality==log.LongitudinalPersonality.relaxed:
     x_vel =  [0.0, 3.0, 6.0, 9.0, 12.0, 15.0]
-    y_dist = [2.5, 2.3, 2.0, 1.9, 1.8, 1.4]
+    y_dist = [1.9, 1.85, 1.8, 1.75, 1.75, 1.75]
   elif personality==log.LongitudinalPersonality.standard:
     x_vel =  [0.0, 3.5, 7.0, 10.5, 14.0, 17.5]
-    y_dist = [2.4, 2.2, 2.0, 1.8, 1.6, 1.0]
+    y_dist = [1.6, 1.55, 1.5, 1.45, 1.45, 1.45]
   elif personality==log.LongitudinalPersonality.aggressive:
     x_vel =  [0.0, 5.0, 10.0, 15.0, 20.0, 25.0]
-    y_dist = [2.2, 2.0, 1.8, 1.5, 1.2, 0.9]
+    y_dist = [1.4, 1.35, 1.3, 1.25, 1.25, 1.25]
   else:
     raise NotImplementedError("Dynamic Follow personality not supported")
   return np.interp(v_ego, x_vel, y_dist)
@@ -272,7 +275,7 @@ class LongitudinalMpc:
     self.x0 = np.zeros(X_DIM)
     self.set_weights()
 
-  def set_weights(self, prev_accel_constraint=True, personality=log.LongitudinalPersonality.standard):
+  def set_weights(self, prev_accel_constraint=True, personality=log.LongitudinalPersonality.standard, lead_accel_relaxed=False):
     if self.e2e:
       self.set_weights_for_xva_policy()
       self.params[:,0] = -10.
@@ -280,12 +283,16 @@ class LongitudinalMpc:
       self.params[:,2] = 1e5
       self.params[:,4] = get_T_FOLLOW()
     else:
-      self.set_weights_for_lead_policy(prev_accel_constraint, personality)
+      self.set_weights_for_lead_policy(prev_accel_constraint, personality, lead_accel_relaxed)
 
-  def set_weights_for_lead_policy(self, prev_accel_constraint, personality):
+  def set_weights_for_lead_policy(self, prev_accel_constraint, personality, lead_accel_relaxed):
     jerk_factor = get_jerk_factor(personality)
+    if lead_accel_relaxed:
+      jerk_factor *= LEAD_ACCEL_RELAXED_JERK_FACTOR
+    obstacle_factor = LEAD_ACCEL_RELAXED_OBSTACLE_FACTOR if lead_accel_relaxed else 1.0
     a_change_cost = A_CHANGE_COST if prev_accel_constraint else 0
-    W = np.asfortranarray(np.diag([X_EGO_OBSTACLE_COST, X_EGO_COST, V_EGO_COST, A_EGO_COST, jerk_factor * a_change_cost, jerk_factor * J_EGO_COST]))
+    W = np.asfortranarray(np.diag([obstacle_factor * X_EGO_OBSTACLE_COST, X_EGO_COST, V_EGO_COST,
+                                  A_EGO_COST, jerk_factor * a_change_cost, jerk_factor * J_EGO_COST]))
     for i in range(N):
       # reduce the cost on (a-a_prev) later in the horizon.
       W[4,4] = a_change_cost * np.interp(T_IDXS[i], [0.0, 1.0, 2.0], [1.0, 1.0, 0.0])

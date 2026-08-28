@@ -44,8 +44,8 @@ class FakeSM:
 class TestWebUI(unittest.TestCase):
   @classmethod
   def setUpClass(cls):
-    cls.params = FakeParams(); api = WebUI(cls.params); api.sm = FakeSM()
-    cls.server = create_server("127.0.0.1", 0, api)
+    cls.params = FakeParams(); cls.api = WebUI(cls.params); cls.api.sm = FakeSM()
+    cls.server = create_server("127.0.0.1", 0, cls.api)
     cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True); cls.thread.start()
     cls.url = "http://127.0.0.1:%d" % cls.server.server_port
   @classmethod
@@ -59,6 +59,9 @@ class TestWebUI(unittest.TestCase):
     status, data = self.request("/api/v1/config"); self.assertEqual(status, 200); self.assertTrue(data["groups"])
     self.assertTrue(data["states"]["OpenpilotEnabledToggle"]["enabled"])
     self.assertFalse(data["homeModeControlsVisible"])
+    dragonpilot = next(group for group in data["groups"] if group["id"] == "dragonpilot")
+    lateral_controller = next(control for control in dragonpilot["controls"] if control.get("key") == "dp_lat_controller")
+    self.assertEqual(lateral_controller["choices"], ["DEFAULT", "INDI", "LQR", "TORQUE"])
 
   def test_home_modes_require_new_model_and_openpilot_longitudinal(self):
     saved = dict(self.params.values)
@@ -83,6 +86,7 @@ class TestWebUI(unittest.TestCase):
     self.request("/api/v1/params/dp_alka", "PUT", {"value":"1"}); self.assertEqual(self.params.values["dp_alka"], b"1")
     self.request("/api/v1/params/LongitudinalPersonality", "PUT", {"value":"2"}); self.assertEqual(self.params.values["LongitudinalPersonality"], b"2")
     self.request("/api/v1/params/dp_long_accel_profile", "PUT", {"value":"3"}); self.assertEqual(self.params.values["dp_long_accel_profile"], b"3")
+    self.request("/api/v1/params/dp_lat_controller", "PUT", {"value":"3"}); self.assertEqual(self.params.values["dp_lat_controller"], b"3")
     with self.assertRaises(HTTPError): self.request("/api/v1/params/dp_alka", "PUT", {"value":"bad"})
   def test_car_selection(self):
     self.request("/api/v1/actions/select-car", "POST", {"value":"TEST CAR"}); self.assertEqual(self.params.values["dp_car_assigned"], b"TEST CAR")
@@ -145,9 +149,59 @@ class TestWebUI(unittest.TestCase):
       return type("Result", (), {"stdout": "abc123\n", "stderr": ""})()
     with patch("openpilot.selfdrive.webui.webui.subprocess.run", side_effect=fake_run) as run:
       self.assertEqual(WebUI._git("rev-parse", "--short", "HEAD"), "abc123")
+      self.assertEqual(run.call_count, 1)
+
+  def test_pull_update_requires_disengagement(self):
+    with patch("openpilot.selfdrive.webui.webui.subprocess.run") as run:
       with self.assertRaises(HTTPError):
         self.request("/api/v1/actions/pull-update", "POST", {})
-      self.assertEqual(run.call_count, 1)
+      run.assert_not_called()
+
+  def test_pull_update_allows_onroad_and_reports_changed_files(self):
+    controls = self.api.sm["controlsState"]
+    controls.enabled = False
+    try:
+      git_results = ["main", "origin", "refs/heads/main", "origin", "oldsha",
+                     "local.py\nshared.py", "", "remote.py\nshared.py", "", "newsha"]
+      with patch("openpilot.selfdrive.webui.webui.WebUI._git", side_effect=git_results) as git:
+        _, result = self.request("/api/v1/actions/pull-update", "POST", {})
+      self.assertEqual(result["revision"], "newsha")
+      self.assertEqual(result["files"], ["local.py", "shared.py", "remote.py"])
+      commands = [call.args for call in git.call_args_list]
+      self.assertIn(("reset", "--hard", "FETCH_HEAD"), commands)
+    finally:
+      controls.enabled = True
+
+  def test_pull_update_aborts_if_openpilot_engages_during_fetch(self):
+    controls = self.api.sm["controlsState"]
+    controls.enabled = False
+    commands = []
+
+    def fake_git(*args, **kwargs):
+      commands.append(args)
+      if args[:2] == ("symbolic-ref", "--quiet"):
+        return "main"
+      if args[:2] == ("config", "--get") and args[2].endswith(".remote"):
+        return "origin"
+      if args[:2] == ("config", "--get") and args[2].endswith(".merge"):
+        return "refs/heads/main"
+      if args == ("remote",):
+        return "origin"
+      if args == ("rev-parse", "HEAD"):
+        return "oldsha"
+      if args[:2] == ("diff", "--name-only"):
+        return ""
+      if args[:2] == ("fetch", "--no-tags"):
+        controls.enabled = True
+        return ""
+      raise AssertionError(args)
+    try:
+      with patch("openpilot.selfdrive.webui.webui.WebUI._git", side_effect=fake_git):
+        with self.assertRaises(HTTPError):
+          self.request("/api/v1/actions/pull-update", "POST", {})
+      self.assertNotIn(("reset", "--hard", "FETCH_HEAD"), commands)
+    finally:
+      controls.enabled = True
 
   def test_car_list_falls_back_when_manager_has_not_started(self):
     saved = self.params.values.pop("dp_car_list")

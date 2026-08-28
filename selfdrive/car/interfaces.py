@@ -111,6 +111,8 @@ class CarInterfaceBase(ABC):
       cls.configure_indi_tune(ret.lateralTuning)
     elif dp_lat_controller == 2:  # lqr
       cls.configure_lqr_tune(ret.lateralTuning)
+    elif dp_lat_controller == 3:  # torque
+      cls.configure_torque_tune(candidate, ret.lateralTuning)
 
     # Vehicle mass is published curb weight plus assumed payload such as a human driver; notCars have no assumed payload
     if not ret.notCar:

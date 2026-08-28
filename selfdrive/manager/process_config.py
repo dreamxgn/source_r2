@@ -90,7 +90,8 @@ procs = [
 
   # mapd
   PythonProcess("mapd", "selfdrive.mapd.mapd"),
-  # Local, browser-based settings UI. Keep configuration writes offroad-only.
+  # Local browser UI. Safety-sensitive actions enforce their own
+  # controls-state checks.
   PythonProcess("webui", "selfdrive.webui.webui", offroad=True),
   # gpxd
   # PythonProcess("gpxd", "selfdrive.dragonpilot.gpxd"),

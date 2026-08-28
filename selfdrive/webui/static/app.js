@@ -1,4 +1,4 @@
-const state = { data:null, active:"device", videoEnabled:localStorage.getItem("roadVideoEnabled")==="1", videoStreaming:false };
+const state = { data:null, active:"device", lastUpdate:null, videoEnabled:localStorage.getItem("roadVideoEnabled")==="1", videoStreaming:false };
 const $ = s => document.querySelector(s);
 const EMPTY_IMAGE = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
 
@@ -66,7 +66,8 @@ function renderLabels(rows){$("#panel").innerHTML=rows.map(r=>`<div class="label
 
 function renderSoftware(){
   const d=state.data.device;
-  $("#panel").innerHTML=`<div class="device-grid"><div class="label-row"><span>Version</span><span>${d.version}</span></div><div class="label-row"><span>Branch</span><span>${d.branch}</span></div><div class="control"><div class="control-line"><button class="title">Pull Latest Update</button><button class="action danger" data-action="pull-update">PULL</button></div><div class="description">Force tracked files to match the current branch upstream. Local tracked changes will be lost. Git LFS content will not be downloaded.</div></div></div>`;
+  $("#panel").innerHTML=`<div class="device-grid"><div class="label-row"><span>Version</span><span>${d.version}</span></div><div class="label-row"><span>Branch</span><span>${d.branch}</span></div><div class="control"><div class="control-line"><button class="title">Pull Latest Update</button><button class="action danger" data-action="pull-update" ${d.engaged?'disabled':''}>PULL</button></div><div class="description">Available whenever openpilot assistance is disengaged. Force tracked files to match the current branch upstream. Local tracked changes will be lost. Git LFS content will not be downloaded.</div></div><div id="update-result" class="update-result" hidden></div></div>`;
+  if(state.lastUpdate){const files=state.lastUpdate.files||[],result=$("#update-result");result.hidden=false;result.textContent=`Updated to ${state.lastUpdate.revision}\n${files.length?`Changed files (${files.length}):\n${files.join("\n")}`:"No tracked files changed."}`;}
   bindControls();
 }
 
@@ -162,7 +163,7 @@ async function refreshHome(){
 function showHome(){ $("#app").hidden=true; $("#home-view").hidden=false; updateRoadVideo(); }
 function showSettings(panel=state.active){ $("#home-view").hidden=true; $("#app").hidden=false; updateRoadVideo(); state.active=panel; renderNav(); renderPanel(); }
 
-async function confirmAction(action,title){const message=action==="pull-update"?"Pull the latest remote update and permanently discard all tracked local changes? Git LFS content will not be downloaded.":`Are you sure you want to ${title.toLowerCase()}?`;if(!confirm(message))return;try{const result=await request(`/api/v1/actions/${action}`,{method:"POST",body:"{}"});if(action==="pull-update")alert(`Update complete: ${result.revision}`);await load()}catch(e){alert(e.message)}}
+async function confirmAction(action,title){const message=action==="pull-update"?"Pull the latest remote update and permanently discard all tracked local changes? Git LFS content will not be downloaded.":`Are you sure you want to ${title.toLowerCase()}?`;if(!confirm(message))return;try{const result=await request(`/api/v1/actions/${action}`,{method:"POST",body:"{}"});if(action==="pull-update"){state.lastUpdate=result;await load();alert(`Update complete: ${result.revision} (${(result.files||[]).length} changed files)`);}else await load()}catch(e){alert(e.message)}}
 
 $("#vehicle").onclick=()=>{
   if(!state.data)return;

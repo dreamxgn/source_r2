@@ -5,9 +5,10 @@ from types import SimpleNamespace
 from openpilot.selfdrive.controls.lib.accel_controller import should_coast_for_lead, should_relax_accel_change_for_lead
 
 
-def lead(d_rel, v_lead, v_rel=None, status=True):
+def lead(d_rel, v_lead, v_rel=None, a_lead=0.0, status=True):
   return SimpleNamespace(status=status, dRel=d_rel, vLead=v_lead,
-                         vRel=(v_lead - 20.0) if v_rel is None else v_rel)
+                         vRel=(v_lead - 20.0) if v_rel is None else v_rel,
+                         aLeadK=a_lead)
 
 
 class TestLeadCoasting(unittest.TestCase):
@@ -40,11 +41,23 @@ class TestLeadPullaway(unittest.TestCase):
   def test_relaxes_accel_change_for_pulling_away_lead(self):
     self.assertTrue(should_relax_accel_change_for_lead(20.0, lead(40.0, 21.0), 1.45))
 
+  def test_relaxes_earlier_for_accelerating_lead(self):
+    self.assertTrue(should_relax_accel_change_for_lead(20.0, lead(40.0, 20.15, a_lead=0.5), 1.45))
+
   def test_keeps_smoothing_for_small_speed_delta(self):
-    self.assertFalse(should_relax_accel_change_for_lead(20.0, lead(40.0, 20.4), 1.45))
+    self.assertFalse(should_relax_accel_change_for_lead(20.0, lead(36.9, 20.2), 1.45))
+
+  def test_keeps_smoothing_for_unconfirmed_lead_acceleration(self):
+    self.assertFalse(should_relax_accel_change_for_lead(20.0, lead(36.9, 20.15, a_lead=0.2), 1.45))
 
   def test_keeps_smoothing_at_short_distance(self):
-    self.assertFalse(should_relax_accel_change_for_lead(20.0, lead(35.0, 21.0), 1.45))
+    self.assertFalse(should_relax_accel_change_for_lead(20.0, lead(34.9, 21.0), 1.45))
+
+  def test_relaxes_for_excessive_gap_to_same_speed_lead(self):
+    self.assertTrue(should_relax_accel_change_for_lead(20.0, lead(37.0, 20.0), 1.45))
+
+  def test_keeps_smoothing_for_excessive_gap_to_slower_lead(self):
+    self.assertFalse(should_relax_accel_change_for_lead(20.0, lead(37.0, 19.4), 1.45))
 
   def test_keeps_smoothing_without_valid_lead(self):
     self.assertFalse(should_relax_accel_change_for_lead(20.0, lead(40.0, 21.0, status=False), 1.45))

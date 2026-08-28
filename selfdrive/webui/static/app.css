@@ -32,6 +32,8 @@ nav { min-height:0; display:grid; flex:1; grid-template-rows:repeat(5,minmax(0,1
 .stepper button { min-width:0; font-size:44px; }
 .action { min-width:200px; }
 .danger { background:#e22c2c; }
+.action:disabled { opacity:.35; cursor:not-allowed; }
+.update-result { padding:24px 30px; border:1px solid #555; border-radius:12px; background:#171717; color:#ccc; font:24px/1.45 monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
 .device-grid { display:grid; gap:20px; }
 .label-row { min-height:100px; border-bottom:1px solid #777; display:flex; align-items:center; font-size:40px; }
 .label-row span:last-child { margin-left:auto; color:#aaa; font-size:32px; }
@@ -119,6 +121,7 @@ dialog h2 { font-size:40px; text-align:center; } dialog p,dialog select { font-s
   .stepper{flex:0 0 min(185px,55%);width:auto;height:48px;grid-template-columns:46px minmax(0,1fr) 46px;font-size:15px}
   .stepper button{height:48px;font-size:27px}
   .action{flex:0 0 auto;min-width:94px;height:48px;padding:0 12px;font-size:16px}
+  .update-result{padding:14px;font-size:14px}
   .power{grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
   .power button{height:68px;font-size:21px}
   .loading{padding:24px 6px;font-size:23px}

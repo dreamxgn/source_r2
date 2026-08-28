@@ -126,6 +126,7 @@ class LongitudinalPlanner:
       # if required so, force a smooth deceleration
       accel_limits_turns[1] = min(accel_limits_turns[1], AWARENESS_DECEL)
       accel_limits_turns[0] = min(accel_limits_turns[0], accel_limits_turns[1])
+    max_accel_allowed = accel_limits_turns[1]
 
     # clip limits, cannot init MPC outside of bounds
     accel_limits_turns[0] = min(accel_limits_turns[0], self.a_desired + 0.05, a_min_sol)
@@ -133,8 +134,9 @@ class LongitudinalPlanner:
     if should_coast_for_lead(v_ego, sm['radarState'].leadOne, get_T_FOLLOW(self.personality)):
       accel_limits_turns[1] = min(accel_limits_turns[1], max(0.0, self.a_desired - 0.05))
 
-    lead_pulling_away = should_relax_accel_change_for_lead(v_ego, sm['radarState'].leadOne, get_T_FOLLOW(self.personality))
-    self.mpc.set_weights(prev_accel_constraint and not lead_pulling_away, personality=self.personality)
+    relax_accel_for_lead = should_relax_accel_change_for_lead(v_ego, sm['radarState'].leadOne, get_T_FOLLOW(self.personality))
+    self.mpc.set_weights(prev_accel_constraint and not relax_accel_for_lead, personality=self.personality,
+                         lead_accel_relaxed=relax_accel_for_lead)
     self.mpc.set_accel_limits(accel_limits_turns[0], accel_limits_turns[1])
     self.mpc.set_cur_state(self.v_desired_filter.x, self.a_desired)
     self.dp_long_use_krkeegen_tune_active = self.dp_long_use_krkeegen_tune and v_ego <= 7.5
@@ -152,7 +154,8 @@ class LongitudinalPlanner:
 
     # Interpolate 0.05 seconds and save as starting point for next iteration
     a_prev = self.a_desired
-    self.a_desired = float(interp(DT_MDL, T_IDXS[:CONTROL_N], self.a_desired_trajectory))
+    self.a_desired = min(float(interp(DT_MDL, T_IDXS[:CONTROL_N], self.a_desired_trajectory)),
+                         max_accel_allowed)
     self.v_desired_filter.x = self.v_desired_filter.x + DT_MDL * (self.a_desired + a_prev) / 2.0
 
   def publish(self, sm, pm):

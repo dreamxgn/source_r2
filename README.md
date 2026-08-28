@@ -50,7 +50,7 @@ I encourage users to consider purchasing a [comma 3x](https://shop.comma.ai) for
 
 ## Configuration
 
-* For research purposes, the INDI and LQR lateral controllers have been restored. Please use the `dp_lat_controller` parameter to override the default controller (0 = DEFAULT, 1 = INDI, 2 = LQR).
+* For research purposes, the INDI, LQR, and torque lateral controllers are available. Please use the `dp_lat_controller` parameter to override the default controller (0 = DEFAULT, 1 = INDI, 2 = LQR, 3 = TORQUE).
 * If you are not a Comma Two device, you can use the `dp_no_fan_ctrl` parameter to disable fan-related detection and control.
 * The BODY has been tested and is working; however, I personally haven't tried it, so I'm not sure what steps are needed to get it to work.
 

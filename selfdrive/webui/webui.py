@@ -109,7 +109,7 @@ CONTROL_GROUPS = [
     {"key": "dp_car_dashcam_mode_removal", "title": "Dashcam Mode Removal", "type": "toggle", "description": "Force-enable openpilot control when the vehicle is not fully supported. USE AT YOUR OWN RISK. Reboot required."},
     {"section": "🐉 Ctrl - Lateral 🐉"},
     {"key": "dp_alka", "title": "Enable ALKA", "type": "toggle", "description": "Keep lateral control on whenever ACC MAIN is on. Reboot required."},
-    {"key": "dp_lat_controller", "title": "Lateral Controller", "type": "choice", "choices": ["DEFAULT", "INDI", "LQR"], "description": "Change the lateral controller. USE AT YOUR OWN RISK. Reboot required."},
+    {"key": "dp_lat_controller", "title": "Lateral Controller", "type": "choice", "choices": ["DEFAULT", "INDI", "LQR", "TORQUE"], "description": "Change the lateral controller. USE AT YOUR OWN RISK. Reboot required."},
     {"key": "dp_lat_lane_priority_mode", "title": "Enable Lane Priority Mode", "type": "toggle", "description": "Use lane lines when reliable and fall back to laneless mode automatically."},
     {"key": "dp_lat_lane_priority_mode_speed_based", "title": "Only When Drive Above", "type": "number", "min": 0, "max": 120, "step": 1, "suffix": " kph", "zeroText": "All Speed", "visibleWhen": ["dp_lat_lane_priority_mode", "1"], "description": "Use lane lines only above this speed; zero means all speeds."},
     {"key": "dp_lat_lane_change_assist_speed", "title": "Lane Change Assist Activate Speed", "type": "number", "min": 0, "max": 80, "step": 1, "suffix": " mph", "zeroText": "Off", "description": "Adjust lane change assistance activation speed."},
@@ -357,19 +357,34 @@ class WebUI:
 
   def _pull_update(self):
     self.sm.update(0)
-    if bool(self.sm["deviceState"].started) or bool(self.sm["controlsState"].enabled):
-      raise ValueError("updates are only allowed while offroad and disengaged")
+    if bool(self.sm["controlsState"].enabled):
+      raise ValueError("disengage openpilot before updating")
     if not self.update_lock.acquire(blocking=False):
       raise ValueError("an update is already in progress")
     try:
       branch = self._git("symbolic-ref", "--quiet", "--short", "HEAD")
       remote = self._git("config", "--get", "branch.%s.remote" % branch)
       merge_ref = self._git("config", "--get", "branch.%s.merge" % branch)
-      if not merge_ref.startswith("refs/heads/") or remote not in self._git("remote").splitlines():
+      if not merge_ref.startswith("refs/heads/") or \
+         remote not in self._git("remote").splitlines():
         raise ValueError("the current branch has no valid remote upstream")
+      previous_revision = self._git("rev-parse", "HEAD")
+      local_files = self._git("diff", "--name-only", "HEAD").splitlines()
       self._git("fetch", "--no-tags", remote, merge_ref, timeout=300)
+      remote_files = self._git(
+        "diff", "--name-only", previous_revision, "FETCH_HEAD"
+      ).splitlines()
+      changed_files = list(dict.fromkeys(local_files + remote_files))
+      self.sm.update(0)
+      if bool(self.sm["controlsState"].enabled):
+        raise ValueError(
+          "openpilot was enabled during download; update was not applied"
+        )
       self._git("reset", "--hard", "FETCH_HEAD", timeout=120)
-      return {"revision": self._git("rev-parse", "--short", "HEAD")}
+      return {
+        "revision": self._git("rev-parse", "--short", "HEAD"),
+        "files": changed_files,
+      }
     finally:
       self.update_lock.release()
 

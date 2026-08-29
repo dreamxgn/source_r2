@@ -7,6 +7,9 @@
 #endif
 
 #include <cmath>
+#include <set>
+#include <string>
+#include <utility>
 
 #include <QOpenGLBuffer>
 #include <QOffscreenSurface>
@@ -182,6 +185,11 @@ void CameraWidget::showEvent(QShowEvent *event) {
   }
 }
 
+void CameraWidget::hideEvent(QHideEvent *event) {
+  // A hidden preview must not keep consuming camera frames or waking the UI.
+  stopVipcThread();
+}
+
 void CameraWidget::stopVipcThread() {
   if (vipc_thread) {
     vipc_thread->requestInterruption();
@@ -189,6 +197,7 @@ void CameraWidget::stopVipcThread() {
     vipc_thread->wait();
     vipc_thread = nullptr;
   }
+  clearFrames();
 }
 
 void CameraWidget::availableStreamsUpdated(std::set<VisionStreamType> streams) {

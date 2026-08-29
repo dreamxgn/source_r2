@@ -1,7 +1,11 @@
 #pragma once
 
+#include <deque>
 #include <memory>
 #include <mutex>
+#include <set>
+#include <string>
+#include <utility>
 
 #include <QOpenGLFunctions>
 #include <QOpenGLShaderProgram>
@@ -39,6 +43,7 @@ protected:
   void initializeGL() override;
   void resizeGL(int w, int h) override { updateFrameMat(); }
   void showEvent(QShowEvent *event) override;
+  void hideEvent(QHideEvent *event) override;
   void mouseReleaseEvent(QMouseEvent *event) override { emit clicked(); }
   virtual void updateFrameMat();
   void updateCalibration(const mat3 &calib);

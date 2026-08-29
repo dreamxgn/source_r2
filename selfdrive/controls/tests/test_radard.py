@@ -76,6 +76,14 @@ class TestVisionStoppedLeadHold(unittest.TestCase):
     lead_one, _ = self.hold.update(0.0, moving_lead, self.no_lead)
     self.assertEqual(lead_one['vLead'], 1.0)
 
+  def test_closer_moving_target_does_not_release_stopped_lead(self):
+    moving_target = dict(self.stopped_lead, dRel=5.8, yRel=0.2, vLead=1.0, vLeadK=1.0)
+    self.hold.update(0.0, self.stopped_lead, self.no_lead)
+    for _ in range(STOPPED_LEAD_RELEASE_FRAMES + 1):
+      lead_one, _ = self.hold.update(0.0, moving_target, self.no_lead)
+    self.assertTrue(lead_one['status'])
+    self.assertEqual(lead_one['vLead'], 0.0)
+
   def test_driver_movement_resets_hold(self):
     self.hold.update(0.0, self.stopped_lead, self.no_lead)
     lead_one, _ = self.hold.update(1.1, self.no_lead, self.no_lead)

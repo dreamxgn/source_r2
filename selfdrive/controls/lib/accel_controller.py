@@ -8,6 +8,7 @@ DP_ACCEL_SPORT = 3
 COAST_MIN_EGO_SPEED = 2.0
 COAST_MIN_CLOSING_SPEED = 0.3
 COAST_MIN_TTC = 5.0
+COAST_MAX_TTC = 20.0
 COAST_MIN_EXTRA_DISTANCE = 5.0
 COAST_MAX_REQUIRED_DECEL = -0.8
 COAST_COMFORT_BRAKE = 2.5
@@ -17,9 +18,6 @@ LEAD_PULLAWAY_ACCEL_SPEED_DELTA = 0.1
 LEAD_PULLAWAY_MIN_ACCEL = 0.3
 LEAD_PULLAWAY_MIN_DISTANCE_MARGIN = 0.0
 LEAD_GAP_RECOVERY_MIN_EXTRA_DISTANCE = 2.0
-LEAD_GAP_RECOVERY_MIN_CLOSING_SPEED = 0.25
-LEAD_GAP_RECOVERY_MAX_CLOSING_SPEED = 1.0
-LEAD_GAP_RECOVERY_CLOSING_DISTANCE = 10.0
 
 
 def should_coast_for_lead(v_ego, lead, t_follow):
@@ -39,7 +37,7 @@ def should_coast_for_lead(v_ego, lead, t_follow):
 
   ttc = float(lead.dRel) / closing_speed
   required_decel = (v_lead ** 2 - v_ego ** 2) / (2.0 * extra_distance)
-  return ttc > COAST_MIN_TTC and required_decel >= COAST_MAX_REQUIRED_DECEL
+  return COAST_MIN_TTC < ttc < COAST_MAX_TTC and required_decel >= COAST_MAX_REQUIRED_DECEL
 
 
 def should_relax_accel_change_for_lead(v_ego, lead, t_follow):
@@ -53,11 +51,11 @@ def should_relax_accel_change_for_lead(v_ego, lead, t_follow):
   lead_is_pulling_away = (speed_delta >= LEAD_PULLAWAY_MIN_SPEED_DELTA or
                           (speed_delta >= LEAD_PULLAWAY_ACCEL_SPEED_DELTA and lead_accel >= LEAD_PULLAWAY_MIN_ACCEL))
   extra_distance = float(lead.dRel) - minimum_distance if lead is not None else 0.0
-  allowed_closing_speed = min(LEAD_GAP_RECOVERY_MAX_CLOSING_SPEED,
-                              max(LEAD_GAP_RECOVERY_MIN_CLOSING_SPEED,
-                                  extra_distance / LEAD_GAP_RECOVERY_CLOSING_DISTANCE))
+  # Do not relax jerk/obstacle tracking for a slower lead. That case includes
+  # many cut-ins, where relaxing the MPC can turn a mild gap correction into a
+  # conspicuous deceleration. Gap recovery is only for a non-closing lead.
   gap_recovery_needed = (extra_distance >= LEAD_GAP_RECOVERY_MIN_EXTRA_DISTANCE and
-                         speed_delta >= -allowed_closing_speed)
+                         speed_delta >= 0.0)
   return (lead is not None and lead.status and
           (lead_is_pulling_away or gap_recovery_needed) and
           float(lead.dRel) >= minimum_distance)

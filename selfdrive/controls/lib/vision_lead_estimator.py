@@ -18,7 +18,8 @@ STOPPED_LEAD_MAX_DISTANCE = 25.0
 STOPPED_LEAD_MATCH_DISTANCE = 3.0
 STOPPED_LEAD_MATCH_LATERAL = 1.5
 STOPPED_LEAD_MOVING_SPEED = 0.5
-STOPPED_LEAD_RELEASE_FRAMES = 5
+STOPPED_LEAD_RELEASE_FRAMES = 10
+STOPPED_LEAD_RELEASE_DISTANCE_TOLERANCE = 0.75
 
 
 def compensate_stopped_lead_distance(v_ego: float, lead, enabled: bool):
@@ -89,6 +90,13 @@ class VisionStoppedLeadHold:
             abs(lead['dRel'] - self.lead['dRel']) < STOPPED_LEAD_MATCH_DISTANCE and
             abs(lead['yRel'] - self.lead['yRel']) < STOPPED_LEAD_MATCH_LATERAL)
 
+  def _same_moving_lead(self, lead):
+    # A stopped lead pulling away should maintain or increase its range. Vision
+    # can briefly replace it with a closer passing vehicle; do not interpret
+    # that inward distance jump as the stopped lead starting.
+    return (self._same_lead(lead) and
+            lead['dRel'] >= self.lead['dRel'] - STOPPED_LEAD_RELEASE_DISTANCE_TOLERANCE)
+
   def update(self, v_ego: float, lead_one, lead_two):
     if v_ego > STOPPED_LEAD_RESET_EGO_SPEED:
       self.reset()
@@ -104,7 +112,9 @@ class VisionStoppedLeadHold:
     candidates = [lead for lead in (lead_one, lead_two) if self._same_lead(lead)]
     matched_lead = min(candidates, key=lambda lead: abs(lead['dRel'] - self.lead['dRel'])) if candidates else None
 
-    if matched_lead is not None and matched_lead['vLead'] > STOPPED_LEAD_MOVING_SPEED:
+    moving_lead = (matched_lead if matched_lead is not None and
+                   self._same_moving_lead(matched_lead) else None)
+    if moving_lead is not None and moving_lead['vLead'] > STOPPED_LEAD_MOVING_SPEED:
       self.moving_frames += 1
       if self.moving_frames >= STOPPED_LEAD_RELEASE_FRAMES:
         self.reset()

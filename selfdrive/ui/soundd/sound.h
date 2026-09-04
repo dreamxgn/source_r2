@@ -40,7 +40,6 @@ protected:
   QSoundEffect *mounting_offset_voice;
   QSoundEffect *calibration_success_voice;
   QSoundEffect *calibration_failure_voice;
-  QSoundEffect *calibration_check_passed_voice;
   QSoundEffect *calibration_recalibrating_voice;
   QSoundEffect *calibration_initial_voice;
   QSoundEffect *temperature_warning_sound;

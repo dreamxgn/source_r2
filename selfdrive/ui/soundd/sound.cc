@@ -1,6 +1,7 @@
 #include "selfdrive/ui/soundd/sound.h"
 
 #include <cmath>
+#include <string>
 
 #include <QAudio>
 #include <QAudioDeviceInfo>
@@ -32,8 +33,6 @@ Sound::Sound(QObject *parent) : sm({"controlsState", "microphone", "carState", "
   calibration_success_voice->setSource(QUrl::fromLocalFile("../../assets/sounds/calibration_success_zh.wav"));
   calibration_failure_voice = new QSoundEffect(this);
   calibration_failure_voice->setSource(QUrl::fromLocalFile("../../assets/sounds/calibration_failure_zh.wav"));
-  calibration_check_passed_voice = new QSoundEffect(this);
-  calibration_check_passed_voice->setSource(QUrl::fromLocalFile("../../assets/sounds/calibration_check_passed_zh.wav"));
   calibration_recalibrating_voice = new QSoundEffect(this);
   calibration_recalibrating_voice->setSource(QUrl::fromLocalFile("../../assets/sounds/calibration_recalibrating_zh.wav"));
   calibration_initial_voice = new QSoundEffect(this);
@@ -100,8 +99,6 @@ void Sound::update() {
           calibration_success_voice->play();
         } else if (calibration_result == "failure") {
           calibration_failure_voice->play();
-        } else if (calibration_result == "check_passed") {
-          calibration_check_passed_voice->play();
         } else if (calibration_result == "recalibrating") {
           calibration_recalibrating_voice->play();
         } else if (calibration_result == "initial_calibrating") {
@@ -157,7 +154,6 @@ void Sound::update() {
     mounting_offset_voice->setVolume(std::round(100 * volume) / 100);
     calibration_success_voice->setVolume(std::round(100 * volume) / 100);
     calibration_failure_voice->setVolume(std::round(100 * volume) / 100);
-    calibration_check_passed_voice->setVolume(std::round(100 * volume) / 100);
     calibration_recalibrating_voice->setVolume(std::round(100 * volume) / 100);
     calibration_initial_voice->setVolume(std::round(100 * volume) / 100);
     temperature_warning_sound->setVolume(std::round(100 * volume) / 100);

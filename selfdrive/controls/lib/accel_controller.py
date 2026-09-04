@@ -8,7 +8,7 @@ DP_ACCEL_SPORT = 3
 COAST_MIN_EGO_SPEED = 2.0
 COAST_MIN_CLOSING_SPEED = 0.3
 COAST_MIN_TTC = 5.0
-COAST_MAX_TTC = 20.0
+COAST_MAX_LEAD_DISTANCE = 80.0
 COAST_MIN_EXTRA_DISTANCE = 5.0
 COAST_MAX_REQUIRED_DECEL = -0.8
 COAST_COMFORT_BRAKE = 2.5
@@ -29,15 +29,19 @@ def should_coast_for_lead(v_ego, lead, t_follow):
   if closing_speed < COAST_MIN_CLOSING_SPEED:
     return False
 
-  desired_distance = ((v_ego ** 2 - v_lead ** 2) / (2.0 * COAST_COMFORT_BRAKE) +
-                      t_follow * v_ego + COAST_STOP_DISTANCE)
-  extra_distance = float(lead.dRel) - desired_distance
-  if extra_distance < max(COAST_MIN_EXTRA_DISTANCE, 0.3 * v_ego):
+  # Evaluate the optional coasting phase in relative motion. The MPC keeps its
+  # conservative stopped-obstacle distance and danger-zone constraint; this
+  # calculation only decides whether it can defer the soft gap correction.
+  target_distance = t_follow * v_lead + COAST_STOP_DISTANCE
+  available_closing_distance = float(lead.dRel) - target_distance
+  if available_closing_distance < max(COAST_MIN_EXTRA_DISTANCE, 0.3 * v_ego):
     return False
 
   ttc = float(lead.dRel) / closing_speed
-  required_decel = (v_lead ** 2 - v_ego ** 2) / (2.0 * extra_distance)
-  return COAST_MIN_TTC < ttc < COAST_MAX_TTC and required_decel >= COAST_MAX_REQUIRED_DECEL
+  required_decel = -(closing_speed ** 2) / (2.0 * available_closing_distance)
+  return (ttc > COAST_MIN_TTC and
+          float(lead.dRel) < COAST_MAX_LEAD_DISTANCE and
+          required_decel >= COAST_MAX_REQUIRED_DECEL)
 
 
 def should_relax_accel_change_for_lead(v_ego, lead, t_follow):

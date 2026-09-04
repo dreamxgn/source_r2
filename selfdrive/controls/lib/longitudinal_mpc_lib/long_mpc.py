@@ -298,7 +298,10 @@ class LongitudinalMpc:
     for i in range(N):
       self.solver.cost_set(i, 'Zl', Zl)
 
-  def set_weights(self, prev_accel_constraint=True, personality=log.LongitudinalPersonality.standard, lead_accel_relaxed=False):
+  def set_weights(self, prev_accel_constraint=True,
+                  personality=log.LongitudinalPersonality.standard,
+                  lead_accel_relaxed=False, lead_coast_active=False):
+    self.lead_coast_active = lead_coast_active
     jerk_factor = get_jerk_factor(personality)
     if self.mode == 'acc':
       if lead_accel_relaxed:
@@ -332,7 +335,7 @@ class LongitudinalMpc:
     lead_xv = np.column_stack((x_lead_traj, v_lead_traj))
     return lead_xv
 
-  def process_lead(self, lead):
+  def process_lead(self, lead, coast_active=False):
     v_ego = self.x0[1]
     if lead is not None and lead.status:
       x_lead = lead.dRel
@@ -345,6 +348,13 @@ class LongitudinalMpc:
       v_lead = v_ego + 10.0
       a_lead = 0.0
       a_lead_tau = _LEAD_ACCEL_TAU
+
+    # Vision-only lead acceleration is noisy and can project a mild, distant
+    # slowdown into an unnecessarily early brake request. During the guarded
+    # coasting phase, use measured range and relative speed but do not assume
+    # the lead will continue decelerating. This is reevaluated every model tick.
+    if coast_active and not getattr(lead, 'radar', False):
+      a_lead = max(a_lead, 0.0)
 
     # MPC will not converge if immediate crash is expected
     # Clip lead distance to what is still possible to brake for
@@ -368,8 +378,13 @@ class LongitudinalMpc:
     t_follow = get_T_FOLLOW(personality) if not use_df_tune else get_dynamic_follow(v_ego, personality)
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
 
-    lead_xv_0 = self.process_lead(radarstate.leadOne)
-    lead_xv_1 = self.process_lead(radarstate.leadTwo)
+    coast_lead_two = (
+      self.lead_coast_active and radarstate.leadTwo.status and
+      abs(radarstate.leadTwo.dRel - radarstate.leadOne.dRel) < 3.0 and
+      abs(radarstate.leadTwo.vLead - radarstate.leadOne.vLead) < 2.0
+    )
+    lead_xv_0 = self.process_lead(radarstate.leadOne, self.lead_coast_active)
+    lead_xv_1 = self.process_lead(radarstate.leadTwo, coast_lead_two)
 
     # To estimate a safe distance from a moving lead, we calculate how much stopping
     # distance that lead needs as a minimum. We can add that to the current distance

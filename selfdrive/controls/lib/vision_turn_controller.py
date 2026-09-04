@@ -16,7 +16,7 @@ _TURNING_LAT_ACC_TH = 1.6  # Lat Acc threshold to trigger turning turn state.
 _LEAVING_LAT_ACC_TH = 1.3  # Lat Acc threshold to trigger leaving turn state.
 _FINISH_LAT_ACC_TH = 1.1  # Lat Acc threshold to trigger end of turn cycle.
 
-_EVAL_STEP = 5.  # mts. Resolution of the curvature evaluation.
+_EVAL_STEP = 2.5  # mts. Resolution of the curvature evaluation.
 _EVAL_START = 5.  # mts. Distance ahead where to start evaluating vision curvature.
 _EVAL_LENGHT = 150.  # mts. Distance ahead where to stop evaluating vision curvature.
 _EVAL_HORIZON_TIME = 6.  # s. Speed-dependent vision horizon.

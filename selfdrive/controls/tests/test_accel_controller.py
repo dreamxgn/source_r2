@@ -15,8 +15,14 @@ class TestLeadCoasting(unittest.TestCase):
   def test_does_not_coast_for_very_distant_slower_lead(self):
     self.assertFalse(should_coast_for_lead(20.0, lead(105.0, 18.0), 1.45))
 
-  def test_does_not_coast_when_braking_is_needed(self):
-    self.assertFalse(should_coast_for_lead(20.0, lead(70.0, 18.0), 1.45))
+  def test_coasts_before_gradually_matching_a_slower_lead(self):
+    self.assertTrue(should_coast_for_lead(20.0, lead(70.0, 18.0), 1.45))
+
+  def test_does_not_coast_when_relative_braking_is_needed(self):
+    self.assertFalse(should_coast_for_lead(20.0, lead(50.0, 12.0), 1.45))
+
+  def test_coasts_for_recorded_tiguan_approach(self):
+    self.assertTrue(should_coast_for_lead(12.94, lead(65.3, 7.7, v_rel=-5.24), 1.25))
 
   def test_does_not_coast_at_short_ttc(self):
     self.assertFalse(should_coast_for_lead(20.0, lead(45.0, 12.0), 1.45))

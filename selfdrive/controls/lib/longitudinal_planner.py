@@ -163,12 +163,20 @@ class LongitudinalPlanner:
     # clip limits, cannot init MPC outside of bounds
     accel_limits_turns[0] = min(accel_limits_turns[0], self.a_desired + 0.05, a_min_sol)
     accel_limits_turns[1] = max(accel_limits_turns[1], self.a_desired - 0.05)
-    if self.mpc.mode == 'acc' and should_coast_for_lead(v_ego, sm['radarState'].leadOne, get_T_FOLLOW(self.personality)):
+    coast_for_lead = (
+      self.mpc.mode == 'acc' and
+      should_coast_for_lead(v_ego, sm['radarState'].leadOne,
+                            get_T_FOLLOW(self.personality))
+    )
+    if coast_for_lead:
       accel_limits_turns[1] = min(accel_limits_turns[1], max(0.0, self.a_desired - 0.05))
 
-    relax_accel_for_lead = should_relax_accel_change_for_lead(v_ego, sm['radarState'].leadOne, get_T_FOLLOW(self.personality))
-    self.mpc.set_weights(prev_accel_constraint and not relax_accel_for_lead, personality=self.personality,
-                         lead_accel_relaxed=relax_accel_for_lead)
+    relax_accel_for_lead = should_relax_accel_change_for_lead(
+      v_ego, sm['radarState'].leadOne, get_T_FOLLOW(self.personality))
+    self.mpc.set_weights(
+      prev_accel_constraint and not relax_accel_for_lead,
+      personality=self.personality, lead_accel_relaxed=relax_accel_for_lead,
+      lead_coast_active=coast_for_lead)
     self.mpc.set_accel_limits(accel_limits_turns[0], accel_limits_turns[1])
     self.mpc.set_cur_state(self.v_desired_filter.x, self.a_desired)
     # Vision turn speed control is handled by VisionTurnController. Keeping the

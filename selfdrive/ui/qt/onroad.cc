@@ -63,6 +63,14 @@ OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
   setAttribute(Qt::WA_OpaquePaintEvent);
   QObject::connect(uiState(), &UIState::uiUpdate, this, &OnroadWindow::updateState);
   QObject::connect(uiState(), &UIState::offroadTransition, this, &OnroadWindow::offroadTransition);
+  QObject::connect(device(), &Device::displayPowerChanged, this, [=](bool on) {
+    // Avoid spending GPU time painting the camera and overlays while the panel
+    // is powered down. State updates and audible alerts continue normally.
+    setUpdatesEnabled(on);
+    if (on) {
+      update();
+    }
+  });
 
   dp_alka = Params().getBool("dp_alka");
 }

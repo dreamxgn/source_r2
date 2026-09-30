@@ -426,7 +426,12 @@ void Device::updateWakefulness(const UIState &s) {
   // rick - display mode
   // tr("Disabled"), tr("On-Road") tr("MAIN"), tr("OP"), tr("Off")}
   if (s.scene.ignition && s.dp_device_display_off_mode > 0) {
-    // Off - the display will be off completely (incl. warning).
+    // Off - keep the display powered down while ignition is on, including for
+    // warnings. Audible alerts remain available through soundd.
+    if (s.dp_device_display_off_mode == 4) {
+      setAwake(false);
+      return;
+    }
 
     const SubMaster &sm = *(s.sm);
     auto cs = sm["carState"].getCarState().getCruiseState();

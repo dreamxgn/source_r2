@@ -62,6 +62,8 @@ class TestWebUI(unittest.TestCase):
     dragonpilot = next(group for group in data["groups"] if group["id"] == "dragonpilot")
     lateral_controller = next(control for control in dragonpilot["controls"] if control.get("key") == "dp_lat_controller")
     self.assertEqual(lateral_controller["choices"], ["DEFAULT", "INDI", "LQR", "TORQUE"])
+    display_mode = next(control for control in dragonpilot["controls"] if control.get("key") == "dp_device_display_off_mode")
+    self.assertEqual(display_mode["choices"], ["Standard", "On-Road", "MAIN", "OP", "Off"])
 
   def test_home_modes_require_new_model_and_openpilot_longitudinal(self):
     saved = dict(self.params.values)
@@ -87,6 +89,7 @@ class TestWebUI(unittest.TestCase):
     self.request("/api/v1/params/LongitudinalPersonality", "PUT", {"value":"2"}); self.assertEqual(self.params.values["LongitudinalPersonality"], b"2")
     self.request("/api/v1/params/dp_long_accel_profile", "PUT", {"value":"3"}); self.assertEqual(self.params.values["dp_long_accel_profile"], b"3")
     self.request("/api/v1/params/dp_lat_controller", "PUT", {"value":"3"}); self.assertEqual(self.params.values["dp_lat_controller"], b"3")
+    self.request("/api/v1/params/dp_device_display_off_mode", "PUT", {"value":"4"}); self.assertEqual(self.params.values["dp_device_display_off_mode"], b"4")
     with self.assertRaises(HTTPError): self.request("/api/v1/params/dp_alka", "PUT", {"value":"bad"})
   def test_car_selection(self):
     self.request("/api/v1/actions/select-car", "POST", {"value":"TEST CAR"}); self.assertEqual(self.params.values["dp_car_assigned"], b"TEST CAR")

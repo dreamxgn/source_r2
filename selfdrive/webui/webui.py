@@ -137,7 +137,7 @@ CONTROL_GROUPS = [
     {"key": "dp_device_no_ir_ctrl", "title": "Disable IR", "type": "toggle", "description": "Disable infrared illumination. Reboot required."},
     {"key": "dp_device_auto_shutdown", "title": "Enable Auto Shutdown", "type": "toggle", "description": "Automatically shut down the device. Reboot required."},
     {"key": "dp_device_auto_shutdown_in", "title": "Auto Shutdown In", "type": "number", "min": 0, "max": 600, "step": 1, "suffix": " mins", "zeroText": "Immediately", "visibleWhen": ["dp_device_auto_shutdown", "1"], "description": "Adjust the shutdown waiting period."},
-    {"key": "dp_device_display_off_mode", "title": "Display Mode", "type": "choice", "choices": ["Standard", "On-Road", "MAIN", "OP"], "description": "Choose when the device display turns off. Reboot required."},
+    {"key": "dp_device_display_off_mode", "title": "Display Mode", "type": "choice", "choices": ["Standard", "On-Road", "MAIN", "OP", "Off"], "description": "Off keeps the display powered down while ignition is on, including for warnings. Audible alerts remain enabled. Reboot required."},
     {"key": "dp_device_audible_alert_mode", "title": "Audible Alert Mode", "type": "choice", "choices": ["Standard", "Warning", "Off"], "description": "Choose standard sounds, warnings only, or no sound."},
     {"action": "reset-configuration", "title": "Reset Configuration", "button": "RESET"},
   ]},
